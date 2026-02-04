@@ -1,0 +1,76 @@
+### Health Check
+GET http://localhost:3000/health
+
+###
+
+### Test Conversation - Initial Contact (SHOCK phase)
+POST http://localhost:3000/api/conversation
+Content-Type: application/json
+x-api-key: honeypot-guvi-2026-secure-key
+
+{
+  "scammerMessage": "URGENT: Your HDFC account will be blocked in 24 hours. Click here to verify: bit.ly/hdfc-verify123",
+  "nextIntent": "clarify_procedure",
+  "stressScore": 5
+}
+
+###
+
+### Test Conversation - Follow up (PUSHBACK phase)
+POST http://localhost:3000/api/conversation
+Content-Type: application/json
+x-api-key: honeypot-guvi-2026-secure-key
+
+{
+  "conversationId": "test-conversation-001",
+  "scammerMessage": "Sir, your KYC is expired. Share OTP immediately to avoid account suspension.",
+  "nextIntent": "pretend_technical_issue",
+  "stressScore": 7
+}
+
+###
+
+### Test Conversation - Intel Extraction
+POST http://localhost:3000/api/conversation
+Content-Type: application/json
+x-api-key: honeypot-guvi-2026-secure-key
+
+{
+  "conversationId": "test-conversation-001",
+  "scammerMessage": "Call our helpline 9876543210 or send money to paytm.merchant@paytm. Reference ID: EMP12345",
+  "nextIntent": "request_details",
+  "stressScore": 8
+}
+
+###
+
+### Get Conversation History
+GET http://localhost:3000/api/conversation/test-conversation-001
+x-api-key: honeypot-guvi-2026-secure-key
+
+###
+
+### Delete Conversation
+DELETE http://localhost:3000/api/conversation/test-conversation-001
+x-api-key: honeypot-guvi-2026-secure-key
+
+###
+
+### Test Invalid API Key
+POST http://localhost:3000/api/conversation
+Content-Type: application/json
+x-api-key: wrong-key
+
+{
+  "scammerMessage": "Test message"
+}
+
+###
+
+### Test Missing API Key
+POST http://localhost:3000/api/conversation
+Content-Type: application/json
+
+{
+  "scammerMessage": "Test message"
+}
