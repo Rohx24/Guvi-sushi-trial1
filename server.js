@@ -197,19 +197,12 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
             setTimeout(() => sessions.delete(sessionId), 60000);
         }
 
-        // Return FULL response including intelligence (in case GUVI wants it)
-        const guviResponse = {
+        // Return GUVI expected format (Strict Spec Compliance)
+        console.log('📤 Sending response to GUVI:', { status: 'success', reply: response.reply });
+        res.json({
             status: 'success',
-            reply: response.reply,
-            conversation_id: sessionId,
-            scam_detected: response.scamDetected,
-            intel_signals: response.intelSignals,
-            agent_notes: response.agentNotes,
-            phase: response.phase
-        };
-
-        console.log('📤 Sending response to GUVI:', JSON.stringify(guviResponse, null, 2));
-        res.json(guviResponse);
+            reply: response.reply
+        });
         console.log('✅ Response sent successfully!');
 
     } catch (error) {
