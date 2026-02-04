@@ -99,11 +99,14 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
             stressScore = 5
         } = req.body;
 
-        // Validation - allow empty for GUVI test platform
-        if (typeof scammerMessage !== 'string' || scammerMessage.trim().length === 0) {
+        // Use default message if empty string provided
+        const finalMessage = (scammerMessage && scammerMessage.trim()) || 'Test message from GUVI platform';
+
+        // Validation - only check type
+        if (typeof finalMessage !== 'string') {
             return res.status(400).json({
                 error: 'Bad Request',
-                message: 'scammerMessage must be a non-empty string'
+                message: 'scammerMessage must be a string'
             });
         }
 
@@ -134,13 +137,13 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
         // Add current scammer message to history
         conversationHistory.push({
             timestamp: new Date().toISOString(),
-            scammerMessage,
+            scammerMessage: finalMessage,
             stressScore
         });
 
         // Generate agent response (await for OpenAI support)
         const response = await agent.generateResponse(
-            scammerMessage,
+            finalMessage,
             conversationHistory,
             nextIntent,
             stressScore
