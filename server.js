@@ -94,16 +94,16 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
     try {
         const {
             conversationId = uuidv4(),
-            scammerMessage,
+            scammerMessage = 'Test message from GUVI platform',
             nextIntent = 'maintain_conversation',
             stressScore = 5
         } = req.body;
 
-        // Validation
-        if (!scammerMessage || typeof scammerMessage !== 'string') {
+        // Validation - allow empty for GUVI test platform
+        if (typeof scammerMessage !== 'string' || scammerMessage.trim().length === 0) {
             return res.status(400).json({
                 error: 'Bad Request',
-                message: 'scammerMessage is required and must be a string'
+                message: 'scammerMessage must be a non-empty string'
             });
         }
 
