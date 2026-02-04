@@ -203,9 +203,10 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
             setTimeout(() => sessions.delete(sessionId), 60000);
         }
 
-        // Return GUVI expected format - try just the reply
-        console.log('📤 Sending response to GUVI:', response.reply);
+        // Return GUVI expected format
+        console.log('📤 Sending response to GUVI:', { status: 'success', reply: response.reply });
         res.json({
+            status: 'success',
             reply: response.reply
         });
         console.log('✅ Response sent successfully!');
