@@ -20,78 +20,13 @@ class HoneypotAgent {
   }
 
   /**
-   * Main entry point
+   * Main entry point - 100% LLM Driven
    */
   async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
     const startTime = Date.now();
-    console.log('⏱️ Agent.generateResponse started');
+    console.log('⏱️ LLM Agent.generateResponse started');
 
-    // ⚡ FAST PATH: First turn? Use instant template
-    if (conversationHistory.length === 0) {
-      console.log('⚡ First turn detected - Using Fast Template to pass timeout check');
-
-      const reply = this.getFastReply(scammerMessage);
-      const intel = this.extractBasicIntel(scammerMessage);
-
-      console.log(`⏱️ Fast response generated (${Date.now() - startTime}ms)`);
-
-      return {
-        reply: reply,
-        phase: 'SHOCK',
-        scamDetected: this.quickScamCheck(scammerMessage),
-        intelSignals: intel,
-        agentNotes: 'Fast path used for initial response. Switching to LLM for next turn.',
-        shouldTerminate: false,
-        terminationReason: ''
-      };
-    }
-
-    // 🧠 SMART PATH: Subsequent turns use OpenAI
-    console.log('🧠 Subsequent turn - Calling OpenAI...');
-    return await this.generateOpenAIResponse(scammerMessage, conversationHistory, nextIntent, stressScore, startTime);
-  }
-
-  /**
-   * ⚡ Fast template reply for first turn
-   */
-  getFastReply(text) {
-    const templates = [
-      "What happened sir? I don't understand",
-      "Sir what is problem with my account?",
-      "I am confused sir, please explain",
-      "Why I got this message sir?",
-      "Sir I didn't do anything, what happened?"
-    ];
-    return templates[Math.floor(Math.random() * templates.length)];
-  }
-
-  /**
-   * ⚡ Quick Regex-based scam check
-   */
-  quickScamCheck(text) {
-    const indicators = ['urgent', 'verify', 'block', 'suspend', 'otp', 'pin', 'link', 'click'];
-    return indicators.some(i => text.toLowerCase().includes(i));
-  }
-
-  /**
-   * ⚡ Basic regex extraction
-   */
-  extractBasicIntel(text) {
-    return {
-      bankAccounts: (text.match(/\b\d{9,18}\b/g) || []),
-      upiIds: (text.match(/[\w.-]+@[\w.-]+/g) || []),
-      phishingLinks: (text.match(/https?:\/\/[^\s]+/g) || []),
-      phoneNumbers: (text.match(/(?:\+91|0)?[6-9]\d{9}\b/g) || []),
-      employeeIds: [],
-      orgNames: [],
-      suspiciousKeywords: []
-    };
-  }
-
-  /**
-   * 🧠 Full OpenAI Logic
-   */
-  async generateOpenAIResponse(scammerMessage, conversationHistory, nextIntent, stressScore, startTime) {
+    // Build conversation context
     const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
       `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
     ).join('\n\n');
@@ -136,6 +71,8 @@ Intent: ${nextIntent}
 Generate JSON response.`;
 
     try {
+      console.log('⏱️ Calling OpenAI...');
+
       const completion = await this.openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -147,10 +84,10 @@ Generate JSON response.`;
         response_format: { type: "json_object" }
       });
 
+      console.log(`⏱️ OpenAI response received (${Date.now() - startTime}ms)`);
+
       const responseText = completion.choices[0].message.content.trim();
       const llmResponse = JSON.parse(responseText);
-
-      console.log(`⏱️ OpenAI response received (${Date.now() - startTime}ms)`);
 
       return {
         reply: llmResponse.reply,
@@ -182,6 +119,43 @@ Generate JSON response.`;
         terminationReason: ''
       };
     }
+  }
+
+  /**
+   * ⚡ Fast template reply for first turn
+   */
+  getFastReply(text) {
+    const templates = [
+      "What happened sir? I don't understand",
+      "Sir what is problem with my account?",
+      "I am confused sir, please explain",
+      "Why I got this message sir?",
+      "Sir I didn't do anything, what happened?"
+    ];
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  /**
+   * ⚡ Quick Regex-based scam check
+   */
+  quickScamCheck(text) {
+    const indicators = ['urgent', 'verify', 'block', 'suspend', 'otp', 'pin', 'link', 'click'];
+    return indicators.some(i => text.toLowerCase().includes(i));
+  }
+
+  /**
+   * ⚡ Basic regex extraction
+   */
+  extractBasicIntel(text) {
+    return {
+      bankAccounts: (text.match(/\b\d{9,18}\b/g) || []),
+      upiIds: (text.match(/[\w.-]+@[\w.-]+/g) || []),
+      phishingLinks: (text.match(/https?:\/\/[^\s]+/g) || []),
+      phoneNumbers: (text.match(/(?:\+91|0)?[6-9]\d{9}\b/g) || []),
+      employeeIds: [],
+      orgNames: [],
+      suspiciousKeywords: []
+    };
   }
 }
 
