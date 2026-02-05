@@ -313,30 +313,51 @@ REMEMBER:
     if (!extractionState.ifscCode) missingItems.push('IFSC code');
     if (!extractionState.branchLocation) missingItems.push('Branch location');
 
+
     const extractedCount = 15 - missingItems.length;
     const nextTarget = missingItems[0] || 'Delay/Disengage';
 
-    const userPrompt = `History:
-${conversationContext}
+    // Build explicit list of what we ALREADY HAVE (DO NOT ASK)
+    const alreadyHave = [];
+    if (extractionState.caseReference) alreadyHave.push('Case/Reference ID');
+    if (extractionState.scammerName) alreadyHave.push('Scammer name');
+    if (extractionState.department) alreadyHave.push('Department');
+    if (extractionState.callbackNumber) alreadyHave.push('Phone number');
+    if (extractionState.email) alreadyHave.push('Email');
+    if (extractionState.transactionId) alreadyHave.push('Transaction ID');
+    if (extractionState.merchant) alreadyHave.push('Merchant');
+    if (extractionState.amount) alreadyHave.push('Amount');
+    if (extractionState.verificationLink) alreadyHave.push('Link/URL');
+    if (extractionState.upiHandle) alreadyHave.push('UPI');
+    if (extractionState.employeeId) alreadyHave.push('Employee ID');
+    if (extractionState.supervisor) alreadyHave.push('Supervisor');
+    if (extractionState.ifscCode) alreadyHave.push('IFSC');
+    if (extractionState.branchLocation) alreadyHave.push('Branch');
 
-NEW MESSAGE: "${scammerMessage}"
+    const userPrompt = `NEW MESSAGE FROM SCAMMER: "${scammerMessage}"
 
-SESSION STATE (Turn ${totalMessages}/10):
-✅ ALREADY EXTRACTED/ASKED: ${extractedCount}/15 items
-❌ STILL MISSING: ${missingItems.join(', ')}
+🚫 DO NOT ASK ABOUT (WE ALREADY HAVE THESE):
+${alreadyHave.length > 0 ? alreadyHave.join(', ') : 'Nothing yet'}
 
-YOUR NEXT ACTION:
-Pick EXACTLY ONE item from the MISSING list and ask for it.
-NEXT TARGET: ${nextTarget}
+✅ STILL NEED (ASK FOR ONE OF THESE):
+${missingItems.join(', ')}
 
-CRITICAL RULES:
-1. NEVER ask about items in "ALREADY EXTRACTED/ASKED"
-2. ONLY ask about ONE item from "STILL MISSING"
-3. If scammer mentions app/link, ask "What exact steps should I follow?"
-4. If all items extracted, use soft delay: "I will call official helpline"
-5. NEVER say "I can't share OTP" unless they explicitly ask for OTP
+🎯 YOUR MANDATORY TASK:
+Ask for: ${nextTarget}
 
-Generate JSON response asking for: ${nextTarget}`;
+EXAMPLE RESPONSES:
+- If target is "Department name" → "Which department are you calling from?"
+- If target is "Callback phone number" → "Can you provide your official callback number?"
+- If target is "Official email address" → "What's the official email address for this alert?"
+- If target is "Transaction ID" → "What's the transaction ID you're referring to?"
+- If target is "Delay/Disengage" → "I will call the official helpline to verify this."
+
+🚫 FORBIDDEN:
+- DO NOT ask about: ${alreadyHave.join(', ')}
+- DO NOT say "I can't share OTP" unless they ask for OTP
+- DO NOT repeat previous questions
+
+Generate JSON asking ONLY for: ${nextTarget}`;
 
     try {
       console.log('⏱️ Calling OpenAI...');
