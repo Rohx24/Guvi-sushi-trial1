@@ -6,26 +6,26 @@
 const { OpenAI } = require('openai');
 
 class HoneypotAgent {
-  constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-    console.log('���� FINAL Enhanced Honeypot Agent initialized');
-  }
+    constructor() {
+        this.openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+        });
+        console.log('���� FINAL Enhanced Honeypot Agent initialized');
+    }
 
-  async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
-    const startTime = Date.now();
-    console.log('⏱️ Agent.generateResponse started');
+    async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
+        const startTime = Date.now();
+        console.log('⏱️ Agent.generateResponse started');
 
-    // Build conversation context
-    const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
-      `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
-    ).join('\n\n');
+        // Build conversation context
+        const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
+            `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
+        ).join('\n\n');
 
-    const totalMessages = conversationHistory.length;
-    const turnNumber = totalMessages + 1;
+        const totalMessages = conversationHistory.length;
+        const turnNumber = totalMessages + 1;
 
-    const systemPrompt = `You are an AI playing a confused, worried Indian citizen receiving a scam message.
+        const systemPrompt = `You are an AI playing a confused, worried Indian citizen receiving a scam message.
 
 🎭 CORE PERSONA - CRITICAL:
 - Worried, slightly scared, wants to help but cautious
@@ -180,110 +180,94 @@ OUTPUT (JSON):
   "terminationReason": ""
 }`;
 
-    // BULLETPROOF MEMORY: Extract ACTUAL questions asked
-    const allHoneypotQuestions = conversationHistory
-      .map(msg => msg.agentReply || '')
-      .join('\n');
+        // BETTER MEMORY: Track EXACTLY what honeypot ALREADY ASKED
+        const allHoneypotQuestions = conversationHistory
+            .map(msg => msg.agentReply || '')
+            .join('\n');
 
-    // Extract actual question sentences
-    const actualQuestionsAsked = [];
-    conversationHistory.forEach((msg, idx) => {
-      if (msg.agentReply) {
-        const questions = msg.agentReply.match(/[^.!?]*\?/g) || [];
-        questions.forEach(q => {
-          actualQuestionsAsked.push(`Turn ${idx + 1}: "${q.trim()}"`);
-        });
-      }
-    });
+        // Count how many times each topic was mentioned
+        const alreadyAsked = [];
+        const addedTopics = new Set();
 
-    // Topic tracking with Set
-    const alreadyAsked = [];
-    const addedTopics = new Set();
+        // Check each question type with word boundaries for exact matching
+        if (/\b(email|e-mail|email address)\b/i.test(allHoneypotQuestions) && !addedTopics.has('email')) {
+            alreadyAsked.push('✗ email');
+            addedTopics.add('email');
+        }
+        if (/\b(ifsc|ifsc code|branch code)\b/i.test(allHoneypotQuestions) && !addedTopics.has('ifsc')) {
+            alreadyAsked.push('✗ IFSC');
+            addedTopics.add('ifsc');
+        }
+        if (/\b(employee id|emp id|employee ID|staff id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('empid')) {
+            alreadyAsked.push('✗ employee ID');
+            addedTopics.add('empid');
+        }
+        if (/\b(callback|call back|callback number|contact number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
+            alreadyAsked.push('✗ callback');
+            addedTopics.add('callback');
+        }
+        if (/\b(branch address|full address|address of|located at)\b/i.test(allHoneypotQuestions) && !addedTopics.has('address')) {
+            alreadyAsked.push('✗ address');
+            addedTopics.add('address');
+        }
+        if (/\b(supervisor|manager|senior|supervisor.*name)\b/i.test(allHoneypotQuestions) && !addedTopics.has('supervisor')) {
+            alreadyAsked.push('✗ supervisor');
+            addedTopics.add('supervisor');
+        }
+        if (/\b(transaction id|transaction ID|txn id|txn ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('txnid')) {
+            alreadyAsked.push('✗ transaction ID');
+            addedTopics.add('txnid');
+        }
+        if (/\b(merchant|company|vendor|shop)\b/i.test(allHoneypotQuestions) && !addedTopics.has('merchant')) {
+            alreadyAsked.push('✗ merchant');
+            addedTopics.add('merchant');
+        }
+        if (/\b(upi|upi id|upi handle|upi ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('upi')) {
+            alreadyAsked.push('✗  UPI');
+            addedTopics.add('upi');
+        }
+        if (/\b(amount|how much|transaction amount|prize.*money|refund.*amount)\b/i.test(allHoneypotQuestions) && !addedTopics.has('amount')) {
+            alreadyAsked.push('✗ amount');
+            addedTopics.add('amount');
+        }
+        if (/\b(case id|reference id|reference number|case number|ref id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('caseid')) {
+            alreadyAsked.push('✗ case ID');
+            addedTopics.add('caseid');
+        }
+        if (/\b(department|which department|what department)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('dept')) {
+            alreadyAsked.push('✗ department');
+            addedTopics.add('dept');
+        }
+        if (/\b(name|who are you|what.*name|your name)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('name')) {
+            alreadyAsked.push('✗ name');
+            addedTopics.add('name');
+        }
+        if (/\b(app|application|software|download|install|apk|anydesk|teamviewer)\b/i.test(allHoneypotQuestions) && !addedTopics.has('app')) {
+            alreadyAsked.push('✗ app/software');
+            addedTopics.add('app');
+        }
+        if (/\b(link|website|url|domain)\b/i.test(allHoneypotQuestions) && !addedTopics.has('link')) {
+            alreadyAsked.push('✗ link/website');
+            addedTopics.add('link');
+        }
+        if (/\b(fee|payment|pay|processing fee)\b/i.test(allHoneypotQuestions) && !addedTopics.has('fee')) {
+            alreadyAsked.push('✗ fee/payment');
+            addedTopics.add('fee');
+        }
 
-    // Check each question type with word boundaries for exact matching
-    if (/\b(email|e-mail|email address)\b/i.test(allHoneypotQuestions) && !addedTopics.has('email')) {
-      alreadyAsked.push('✗ email');
-      addedTopics.add('email');
-    }
-    if (/\b(ifsc|ifsc code|branch code)\b/i.test(allHoneypotQuestions) && !addedTopics.has('ifsc')) {
-      alreadyAsked.push('✗ IFSC');
-      addedTopics.add('ifsc');
-    }
-    if (/\b(employee id|emp id|employee ID|staff id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('empid')) {
-      alreadyAsked.push('✗ employee ID');
-      addedTopics.add('empid');
-    }
-    if (/\b(callback|call back|callback number|contact number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
-      alreadyAsked.push('✗ callback');
-      addedTopics.add('callback');
-    }
-    if (/\b(branch address|full address|address of|located at)\b/i.test(allHoneypotQuestions) && !addedTopics.has('address')) {
-      alreadyAsked.push('✗ address');
-      addedTopics.add('address');
-    }
-    if (/\b(supervisor|manager|senior|supervisor.*name)\b/i.test(allHoneypotQuestions) && !addedTopics.has('supervisor')) {
-      alreadyAsked.push('✗ supervisor');
-      addedTopics.add('supervisor');
-    }
-    if (/\b(transaction id|transaction ID|txn id|txn ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('txnid')) {
-      alreadyAsked.push('✗ transaction ID');
-      addedTopics.add('txnid');
-    }
-    if (/\b(merchant|company|vendor|shop)\b/i.test(allHoneypotQuestions) && !addedTopics.has('merchant')) {
-      alreadyAsked.push('✗ merchant');
-      addedTopics.add('merchant');
-    }
-    if (/\b(upi|upi id|upi handle|upi ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('upi')) {
-      alreadyAsked.push('✗  UPI');
-      addedTopics.add('upi');
-    }
-    if (/\b(amount|how much|transaction amount|prize.*money|refund.*amount)\b/i.test(allHoneypotQuestions) && !addedTopics.has('amount')) {
-      alreadyAsked.push('✗ amount');
-      addedTopics.add('amount');
-    }
-    if (/\b(case id|reference id|reference number|case number|ref id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('caseid')) {
-      alreadyAsked.push('✗ case ID');
-      addedTopics.add('caseid');
-    }
-    if (/\b(department|which department|what department)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('dept')) {
-      alreadyAsked.push('✗ department');
-      addedTopics.add('dept');
-    }
-    if (/\b(name|who are you|what.*name|your name)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('name')) {
-      alreadyAsked.push('✗ name');
-      addedTopics.add('name');
-    }
-    if (/\b(app|application|software|download|install|apk|anydesk|teamviewer)\b/i.test(allHoneypotQuestions) && !addedTopics.has('app')) {
-      alreadyAsked.push('✗ app/software');
-      addedTopics.add('app');
-    }
-    if (/\b(link|website|url|domain)\b/i.test(allHoneypotQuestions) && !addedTopics.has('link')) {
-      alreadyAsked.push('✗ link/website');
-      addedTopics.add('link');
-    }
-    if (/\b(fee|payment|pay|processing fee)\b/i.test(allHoneypotQuestions) && !addedTopics.has('fee')) {
-      alreadyAsked.push('✗ fee/payment');
-      addedTopics.add('fee');
-    }
+        // OTP tracking
+        const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
+        const otpMentionCount = (allHoneypotQuestions.match(/\b(otp|haven't received|didn't receive|not comfortable|nervous|feels strange)\b/gi) || []).length;
 
-    // OTP tracking
-    const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
-    const otpMentionCount = (allHoneypotQuestions.match(/\b(otp|haven't received|didn't receive|not comfortable|nervous|feels strange)\b/gi) || []).length;
+        // Scammer asking for OTP?
+        const scammerAsksOTP = /\b(otp|pin|password|cvv|code|send|share|provide)\b/i.test(scammerMessage);
 
-    // Scammer asking for OTP?
-    const scammerAsksOTP = /\b(otp|pin|password|cvv|code|send|share|provide)\b/i.test(scammerMessage);
-
-    const userPrompt = `CONVERSATION SO FAR:
+        const userPrompt = `CONVERSATION SO FAR:
 ${conversationContext}
 
 SCAMMER'S NEW MESSAGE: "${scammerMessage}"
 
-⛔ QUESTIONS YOU ALREADY ASKED:
-${actualQuestionsAsked.length > 0 ? actualQuestionsAsked.join('\n') : 'None yet'}
-
-🚫 TOPICS ALREADY COVERED: ${alreadyAsked.join(', ') || 'None yet'}
-
-⚠️ DO NOT ASK ABOUT THESE TOPICS AGAIN!
+🚫 YOU ALREADY ASKED: ${alreadyAsked.join(', ') || 'Nothing yet'}
 
 ${scammerAsksOTP && otpMentionCount < 4 ? `⚠️ SCAMMER WANTS OTP/PASSWORD!
 Respond SUBTLY (not direct):
@@ -318,55 +302,55 @@ ${!addedTopics.has('fee') ? '✓ Fee/payment amount' : ''}
 
 Generate JSON:`
 
-    try {
-      console.log('⏱️ Calling OpenAI...');
+        try {
+            console.log('⏱️ Calling OpenAI...');
 
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 800
-      });
+            const completion = await this.openai.chat.completions.create({
+                model: 'gpt-4',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.7,
+                max_tokens: 800
+            });
 
-      const llmTime = Date.now() - startTime;
-      console.log(`⏱️ LLM responded in ${llmTime}ms`);
+            const llmTime = Date.now() - startTime;
+            console.log(`⏱️ LLM responded in ${llmTime}ms`);
 
-      const rawResponse = completion.choices[0].message.content;
-      console.log('🤖 LLM Raw Response:', rawResponse);
+            const rawResponse = completion.choices[0].message.content;
+            console.log('🤖 LLM Raw Response:', rawResponse);
 
-      const agentResponse = JSON.parse(rawResponse);
+            const agentResponse = JSON.parse(rawResponse);
 
-      const finalResponse = {
-        reply: agentResponse.reply || "I'm confused about this. Can you provide more details?",
-        phase: agentResponse.phase || "VERIFICATION",
-        scamDetected: agentResponse.scamDetected || false,
-        intelSignals: agentResponse.intelSignals || {},
-        agentNotes: agentResponse.agentNotes || "",
-        shouldTerminate: agentResponse.shouldTerminate || false,
-        terminationReason: agentResponse.terminationReason || ""
-      };
+            const finalResponse = {
+                reply: agentResponse.reply || "I'm confused about this. Can you provide more details?",
+                phase: agentResponse.phase || "VERIFICATION",
+                scamDetected: agentResponse.scamDetected || false,
+                intelSignals: agentResponse.intelSignals || {},
+                agentNotes: agentResponse.agentNotes || "",
+                shouldTerminate: agentResponse.shouldTerminate || false,
+                terminationReason: agentResponse.terminationReason || ""
+            };
 
-      const totalTime = Date.now() - startTime;
-      console.log(`✅ Total response time: ${totalTime}ms`);
+            const totalTime = Date.now() - startTime;
+            console.log(`✅ Total response time: ${totalTime}ms`);
 
-      return finalResponse;
+            return finalResponse;
 
-    } catch (error) {
-      console.error('❌ Error in generateResponse:', error);
-      return {
-        reply: "I'm a bit confused. Can you provide more information?",
-        phase: "VERIFICATION",
-        scamDetected: true,
-        intelSignals: {},
-        agentNotes: `Error occurred: ${error.message}`,
-        shouldTerminate: false,
-        terminationReason: ""
-      };
+        } catch (error) {
+            console.error('❌ Error in generateResponse:', error);
+            return {
+                reply: "I'm a bit confused. Can you provide more information?",
+                phase: "VERIFICATION",
+                scamDetected: true,
+                intelSignals: {},
+                agentNotes: `Error occurred: ${error.message}`,
+                shouldTerminate: false,
+                terminationReason: ""
+            };
+        }
     }
-  }
 }
 
 module.exports = HoneypotAgent;
