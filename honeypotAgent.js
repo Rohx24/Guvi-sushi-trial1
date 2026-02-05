@@ -423,8 +423,9 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
       ? `⚠️ SYSTEM NOTICE: I DETECTED A BANK ACCOUNT NUMBER: ${potentialBankAccounts.join(', ')} (based on 'account' keyword). ADD TO 'bankAccounts'! (Ignore if it's a phone number)`
       : '';
 
-    // Check for money mention to trigger emotional spike
-    const moneyMentioned = /\b(rs\.?|inr|rupees|amount|charge|pay)\b/i.test(scammerMessage) || /\d+/.test(scammerMessage);
+    // Check for REAL money mention (symbols, currency words, or large numbers with separators)
+    // Avoids triggering on "2 hours", "step 1", "case 123"
+    const moneyMentioned = /(?:rs\.?|inr|rupees|₹|\$|usd|bucks)\s*[\d,k]+|(?:amount|fee|charge|balance).{0,10}[\d,k]+/i.test(scammerMessage);
 
     const userPrompt = `CONVERSATION SO FAR:
 ${conversationContext}
