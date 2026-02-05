@@ -224,43 +224,72 @@ REMEMBER:
       branchLocation: false
     };
 
-    // Scan ALL previous messages (both scammer and honeypot) to see what intel we've extracted
+    // Scan ALL previous messages to see what intel the SCAMMER has PROVIDED
     conversationHistory.forEach(msg => {
       if (!msg || !msg.text) return; // Safety check
       const text = msg.text.toLowerCase();
 
-      // Check scammer messages for intel they provided
+      // ONLY check scammer messages for intel they actually provided
       if (msg.sender === 'scammer') {
-        if (/ref[-:\s]?\d+|case[-:\s]?\d+|complaint[-:\s]?\d+|ticket[-:\s]?\d+/i.test(text)) extractionState.caseReference = true;
-        if (/employee\s+id|emp\s*\d+|id:\s*\d+/i.test(text)) extractionState.employeeId = true;
-        if (/\d{10}|\+91[-\s]?\d{10}/.test(text)) extractionState.callbackNumber = true;
-        if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(text)) extractionState.email = true;
-        if (/http|www\.|bit\.ly|tinyurl/i.test(text)) extractionState.verificationLink = true;
-        if (/anydesk|teamviewer|quicksupport|\.apk/i.test(text)) extractionState.appName = true;
-        if (/[a-z0-9]+@(paytm|ybl|oksbi|okaxis|okicici)/i.test(text)) extractionState.upiHandle = true;
-        if (/txn|transaction|merchant|₹\s*\d+|rs\.?\s*\d+/i.test(text)) {
+        // Case/Reference ID
+        if (/ref[-:\s#]?\d+|case[-:\s#]?\d+|complaint[-:\s#]?\d+|ticket[-:\s#]?\d+/i.test(msg.text)) {
+          extractionState.caseReference = true;
+        }
+
+        // Scammer name (look for "my name is" or "this is")
+        if (/my name is|this is|i am|i'm\s+[A-Z][a-z]+/i.test(msg.text)) {
+          extractionState.scammerName = true;
+        }
+
+        // Department
+        if (/department|team|division|fraud prevention|security team|customer care/i.test(text)) {
+          extractionState.department = true;
+        }
+
+        // Phone numbers
+        if (/\d{10}|\+91[-\s]?\d{10}|call.*\d{3,}/i.test(msg.text)) {
+          extractionState.callbackNumber = true;
+        }
+
+        // Email
+        if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(text)) {
+          extractionState.email = true;
+        }
+
+        // Links/URLs
+        if (/http|www\.|bit\.ly|tinyurl|\.com|\.in/i.test(text)) {
+          extractionState.verificationLink = true;
+        }
+
+        // Apps
+        if (/anydesk|teamviewer|quicksupport|\.apk|download.*app|install/i.test(text)) {
+          extractionState.appName = true;
+        }
+
+        // UPI
+        if (/[a-z0-9]+@(paytm|ybl|oksbi|okaxis|okicici)/i.test(text)) {
+          extractionState.upiHandle = true;
+        }
+
+        // Transaction details
+        if (/txn|transaction\s*(id|number)|merchant|₹\s*\d+|rs\.?\s*\d+/i.test(text)) {
           extractionState.transactionId = true;
           extractionState.merchant = true;
           extractionState.amount = true;
         }
-        if (/[a-z]{4}0\d{6}/i.test(text)) extractionState.ifscCode = true;
-      }
 
-      // Check honeypot messages to see what we ASKED for
-      if (msg.sender === 'honeypot') {
-        if (text.includes('case') || text.includes('reference') || text.includes('complaint')) extractionState.caseReference = true;
-        if (text.includes('your name') || text.includes('full name')) extractionState.scammerName = true;
-        if (text.includes('department')) extractionState.department = true;
-        if (text.includes('callback') || text.includes('phone') || text.includes('contact number')) extractionState.callbackNumber = true;
-        if (text.includes('email')) extractionState.email = true;
-        if (text.includes('transaction')) extractionState.transactionId = true;
-        if (text.includes('merchant')) extractionState.merchant = true;
-        if (text.includes('amount')) extractionState.amount = true;
-        if (text.includes('link') || text.includes('url') || text.includes('domain')) extractionState.verificationLink = true;
-        if (text.includes('upi')) extractionState.upiHandle = true;
-        if (text.includes('employee id')) extractionState.employeeId = true;
-        if (text.includes('supervisor') || text.includes('manager')) extractionState.supervisor = true;
-        if (text.includes('ifsc') || text.includes('branch')) {
+        // Employee ID
+        if (/employee\s+id|emp\s*[-:#]?\s*\d+|id:\s*\d+|staff\s+id/i.test(text)) {
+          extractionState.employeeId = true;
+        }
+
+        // Supervisor
+        if (/supervisor|manager|senior|officer/i.test(text)) {
+          extractionState.supervisor = true;
+        }
+
+        // IFSC
+        if (/[a-z]{4}0\d{6}|ifsc|branch\s+code/i.test(text)) {
           extractionState.ifscCode = true;
           extractionState.branchLocation = true;
         }
