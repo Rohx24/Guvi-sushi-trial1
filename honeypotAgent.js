@@ -226,6 +226,7 @@ REMEMBER:
 
     // Scan ALL previous messages (both scammer and honeypot) to see what intel we've extracted
     conversationHistory.forEach(msg => {
+      if (!msg || !msg.text) return; // Safety check
       const text = msg.text.toLowerCase();
 
       // Check scammer messages for intel they provided
