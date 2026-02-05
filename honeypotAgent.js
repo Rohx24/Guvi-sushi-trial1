@@ -352,12 +352,18 @@ ${actualQuestionsAsked.length > 0 ? actualQuestionsAsked.join('\n') : 'None yet'
 
 ⚠️ DO NOT ASK ABOUT THESE TOPICS AGAIN!
 
+🎭 EMOTION CONTROL (CURRENT TURN: ${turnNumber}):
+${turnNumber <= 2 ? `→ You MAY show concern: "This is alarming sir..." or "I'm worried..."` : `→ BE CALM & PRACTICAL NOW. NO MORE "worried", "nervous", "anxious", "scared"
+→ Just ask verification questions directly
+→ Example: "Sir, what is your employee ID?" (NOT "I'm worried sir, what is your employee ID?")
+→ Sound like you're VERIFYING, not panicking`}
+
 ${scammerAsksOTP && otpMentionCount < 4 ? `⚠️ SCAMMER WANTS OTP/PASSWORD!
 Respond SUBTLY (not direct):
-${otpMentionCount === 0 ? '→ "I haven\'t received any OTP yet... What\'s [NEW]?"' : ''}
-${otpMentionCount === 1 ? '→ "The SMS hasn\'t arrived. Can you tell me [NEW]?"' : ''}
-${otpMentionCount === 2 ? '→ "I\'m nervous about this. My bank said never share OTP... What\'s [NEW]?"' : ''}
-${otpMentionCount >= 3 ? '→ "This doesn\'t feel right. Can I call the bank to verify? What\'s [NEW]?"' : ''}
+${otpMentionCount === 0 ? '→ "Sir, I\'m not getting any OTP message only. What is your [NEW]?"' : ''}
+${otpMentionCount === 1 ? '→ "Actually the SMS is not coming sir. Can you please tell me [NEW]?"' : ''}
+${otpMentionCount === 2 ? '→ "Sir, my bank told me never share OTP. What is [NEW]?"' : ''}
+${otpMentionCount >= 3 ? '→ "But sir, let me call bank and confirm. What is [NEW]?"' : ''}
 ` : ''}
 
 ✅ ASK SOMETHING COMPLETELY NEW:
