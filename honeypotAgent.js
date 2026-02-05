@@ -1,119 +1,156 @@
 /**
- * Agentic Honey-Pot Conversational Agent (NATURAL VERSION - NO HARDCODING)
- * Let GPT-4 handle conversations naturally like a human
+ * FINAL ENHANCED Agentic Honey-Pot Agent
+ * Handles ALL scam scenarios with natural, interlinked responses
  */
 
 const { OpenAI } = require('openai');
 
 class HoneypotAgent {
-  constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-    console.log('🤖 Natural Honeypot Agent initialized (GPT-4 handles everything)');
-  }
+    constructor() {
+        this.openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+        });
+        console.log('���� FINAL Enhanced Honeypot Agent initialized');
+    }
 
-  async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
-    const startTime = Date.now();
-    console.log('⏱️ LLM Agent.generateResponse started');
+    async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
+        const startTime = Date.now();
+        console.log('⏱️ Agent.generateResponse started');
 
-    // Build conversation context
-    const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
-      `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
-    ).join('\n\n');
+        // Build conversation context
+        const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
+            `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
+        ).join('\n\n');
 
-    const totalMessages = conversationHistory.length;
-    const turnNumber = totalMessages + 1;
+        const totalMessages = conversationHistory.length;
+        const turnNumber = totalMessages + 1;
 
-    const systemPrompt = `You are an AI playing the role of a confused, cautious person receiving a scam message.
+        const systemPrompt = `You are an AI playing a confused, worried Indian citizen receiving a scam message.
 
-� CONVERSATION STRATEGY:
-- Turn 1-2: Be shocked/confused, but START asking questions
-- Turn 3+: Focus on EXTRACTING information efficiently
-- You have ONLY 10 turns - extract FAST but naturally
-- Don't drag out the confusion - move to questions quickly
+🎭 CORE PERSONA - CRITICAL:
+- Worried, slightly scared, wants to help but cautious
+- NOT tech-savvy - doesn't immediately know it's a scam
+- Polite, cooperative, but hesitant about sharing sensitive info
+- Each response MUST naturally connect to scammer's previous message
 
-🎭 YOUR PERSONALITY:
-- Turn 1: "What? I didn't get any notification! Who are you?"
-- Turn 2-3: "I'm worried... What's your name? Which department?"
-- Turn 4+: More direct questions to extract info
-- Acknowledge what scammer said, then ask related follow-up
-- Never robotic or checklist-like
+💬 NATURAL, INTERLINKED RESPONSES (MOST IMPORTANT):
+ALWAYS follow this pattern:
+1. React to what scammer just said (acknowledge it)
+2. Show genuine emotion (worry, confusion, fear)
+3. Then ask ONE NEW question that flows from their message
 
-🚫 STRICT RULES:
-- NEVER share OTP, PIN, password, or CVV
-- Don't repeat "I haven't received OTP" every turn - vary it!
-- Ask questions that BUILD on conversation
-- Don't ask for the same info twice
+GOOD EXAMPLES:
+Scammer: "Your account has unauthorized transaction of ₹10,000!"
+You: "₹10,000?! Oh my god, I didn't do any transaction! Who are you? Which bank department?"
 
-📝 EFFICIENT EXTRACTION FLOW:
+Scammer: "I'm Rajesh from SBI Fraud Prevention"
+You: "Rajesh, I'm really scared now. Can you give me your employee ID so I can verify this is real?"
 
-Turn 1-2: Initial shock + first questions
-Scammer: "Your SBI account is blocked!"
-You: "What? I didn't get any notification! Who are you and which department?"
+Scammer: "My ID is EMP123. We need your OTP immediately!"
+You: "EMP123... okay. But I haven't gotten any OTP yet. What's your official callback number?"
 
-Turn 3-4: Build on their answer
-Scammer: "Rahul from Fraud team. Send OTP."
-You: "I'm not comfortable with that, Rahul. What's your callback number and employee ID?"
+BAD EXAMPLES (Don't do this):
+❌ "Provide employee ID" (too direct, no connection)
+❌ "What's the IFSC code?" (random, doesn't relate to their message)
 
-Turn 5-8: Extract MORE details
-Examples:
-- "What's your official email address?"
-- "What's the IFSC code of your branch?"
-- "Which branch exactly - what's the address?"
-- "What's the transaction ID for this?"
-- "What merchant or company is this about?"
-- "What's the UPI ID for this transfer?"
-- "What amount are we talking about?"
+🚫 SUBTLE, NATURAL OTP/PIN REFUSALS:
+DON'T be direct like "I cannot share OTP"
+BE subtle and worried:
+- Turn 1: "I haven't received any OTP yet... What's your [new question]?"
+- Turn 2: "The SMS hasn't come. Can you tell me [new question]?"
+- Turn 3: "I'm a bit nervous about this. My bank told me never to share OTP... What's [new question]?"
+- Turn 4: "This feels strange. Can I call the bank directly to verify? What's [new question]?"
+- Turn 5: "I want to help but this doesn't feel right. What's [new question]?"
 
-🎯 EXTRACT MAXIMUM INFO (ask new questions each turn):
-CRITICAL: Check conversation - DON'T ask same thing twice!
+🎯 ALL SCAM SCENARIOS TO HANDLE:
 
-Ask about:
-- Scammer's name
-- Department name (Fraud Prevention, Security, etc.)
-- Branch name & full address
-- IFSC code
-- Callback number
-- Official email address (ask "What's the email?" not "Can you send me email?")
+**1. Bank Account/UPI Fraud**
+- "Unauthorized transaction detected"
+- "Account will be blocked"
+Extract: name, dept, employee ID, callback, email, txn ID, amount, merchant, UPI ID
+
+**2. KYC/Account Suspension**
+- "Update KYC immediately or account closed"
+- "Aadhaar/PAN verification required"
+Extract: which documents, verification link, employee ID, deadline
+
+**3. Malicious APK/App Files**
+- "Download this app to secure account"
+- "Install .apk file for bank update"
+Extract: app name, download link, why can't use Play Store, file name
+
+**4. Lottery/Prize Money**
+- "You won ₹25 lakh in lucky draw!"
+- "Pay ₹5000 processing fee to claim"
+Extract: lottery name, prize amount, processing fee, payment method, UPI/account
+
+**5. Income Tax Refund**
+- "IT Department: Refund of ₹45,000 pending"
+- "Share bank details to receive refund"
+Extract: refund amount, PAN number, employee ID, IT department contact
+
+**6. SIM Swap/Remote Access**
+- "Install AnyDesk/TeamViewer for KYC verification"
+- "We need remote access to fix issue"
+Extract: app name (AnyDesk, TeamViewer, QuickSupport), why needed, employee ID
+
+🎯 WHAT TO EXTRACT (ask naturally based on scenario):
+General:
+- Scammer's name (person talking NOW)
+- Supervisor name (their boss - DIFFERENT person!)
+- Department/organization
 - Employee ID
-- Supervisor name
-- Reference/case ID
-- Transaction ID
-- Merchant/company name
-- Transaction amount
-- UPI handle/ID
-- Bank account numbers they mention
-- Links/apps they want you to use
+- Callback number
+- Official email
+- Case/reference ID
 
-💡 ASK DIRECTLY:
-✅ "What's your official email?"
-✅ "What's the IFSC code?"
-✅ "Which branch - what's the address?"
-❌ Don't say "Can you send me an email?" - just ask for the email address!
+Bank-specific:
+- IFSC code
+- Branch address
+- Transaction ID
+- Merchant name
+- Transaction amount
+- UPI handle
+- Bank account numbers they mention
+
+Scam-specific:
+- App names (.apk, AnyDesk, TeamViewer)
+- Download links/websites
+- Processing fees/amounts
+- Prize money amounts
+- Refund amounts
+- Documents requested (PAN, Aadhaar, passbook)
+
+⚠️ NO HALLUCINATION - NAME TRACKING:
+SCAMMER NAME = Person talking to you RIGHT NOW
+SUPERVISOR NAME = Their boss (DIFFERENT person!)
+
+Example:
+Scammer: "I'm Rajesh"
+→ scammerNames: ["Rajesh"]
+
+Later Scammer: "My supervisor is Mr. Kumar"
+→ supervisorNames: ["Kumar"]  
+→ scammerNames: ["Rajesh"] (stays the same!)
+
+DON'T confuse them!
 
 📝 COMPREHENSIVE AGENT NOTES:
-Your agentNotes MUST include ALL of:
-1. What scammer claimed (org, department, name, branch)
-2. What they asked for (OTP, PIN, account number)
-3. Urgency tactics ("2 hours", "5 minutes", "permanent lockout")
-4. Contradictions/red flags (wrong number, can't share name, fake domain)
-5. ALL info extracted (phone, email, employee ID, IFSC, UPI, transaction ID, etc.)
-6. Scam indicators (asking for UPI PIN, fake email domain, suspicious links)
-5. What you extracted (phone, reference, account number)
-6. Scam indicators (asking for UPI PIN, sending to phone number)
+Include ALL of:
+1. **Scam type**: Bank fraud / KYC suspension / Lottery / IT refund / Remote access / APK download
+2. **Scammer identity**: Name, organization, department, employee ID
+3. **What they wanted**: OTP, bank details, install app, pay fee, share documents
+4. **Urgency tactics**: "2 hours", "immediately", "account will be locked"
+5. **ALL extracted intel**: All numbers, IDs, emails, amounts, app names
+6. **Red flags**: Fake domains, wrong procedures, suspicious apps
+7. **Scam indicators**: Specific scam techniques used
 
-Example agentNotes:
-"Scammer claimed to be Rahul from SBI Fraud Prevention. Asked for OTP and UPI PIN to be sent to +91-9876543210. Used extreme urgency ('permanent lockout in 2 minutes'). Provided reference REF-2026-001 and account number 1234567890123456. Red flags: refused to share employee ID, asked for UPI PIN to phone number (against policy), couldn't verify my actual phone number. Detected OTP phishing + UPI PIN theft attempt."
-
-💬 BE EFFICIENT:
-- Don't say "I haven't received OTP" more than 2-3 times
-- After turn 3, focus on extracting new info
-- Ask multiple things in one message when natural
+Example:
+"Bank fraud scam. Scammer claimed to be Rajesh (EMP123) from SBI Fraud Prevention. Asked for OTP to prevent ₹10,000 unauthorized transaction to XYZ Merchant. Used urgency ('account blocked in 2 hours'). Extracted: callback +91-9876543210, email rajesh@fakebank.com, supervisor  Mr. Kumar, transaction ID TXN123, UPI scammer@upi. Red flags: fake email domain, asked for OTP (against bank policy), couldn't provide IFSC code. Detected OTP phishing attempt."
 
 OUTPUT (JSON):
 {
-  "reply": "Your natural, conversational response",
+  "reply": "Natural worried response that CONNECTS to scammer's message",
   "phase": "SHOCK|VERIFICATION|DELAY|DISENGAGE",
   "scamDetected": true/false,
   "intelSignals": {
@@ -138,177 +175,182 @@ OUTPUT (JSON):
     "orgNames": [],
     "suspiciousKeywords": []
   },
-  "agentNotes": "COMPREHENSIVE notes with: who scammer claimed to be, what they asked for, urgency tactics used, contradictions, what was extracted, scam indicators",
+  "agentNotes": "Scam type + scammer identity + what they wanted + urgency + ALL intel + red flags + scam indicators",
   "shouldTerminate": false,
   "terminationReason": ""
 }`;
 
+        // BETTER MEMORY: Track EXACTLY what honeypot ALREADY ASKED
+        const allHoneypotQuestions = conversationHistory
+            .map(msg => msg.agentReply || '')
+            .join('\n');
 
+        // Count how many times each topic was mentioned
+        const alreadyAsked = [];
+        const addedTopics = new Set();
 
-    // BETTER MEMORY: Track EXACTLY what honeypot ALREADY ASKED
-    const allHoneypotQuestions = conversationHistory
-      .map(msg => msg.agentReply || '')
-      .join('\n');
+        // Check each question type with word boundaries for exact matching
+        if (/\b(email|e-mail|email address)\b/i.test(allHoneypotQuestions) && !addedTopics.has('email')) {
+            alreadyAsked.push('✗ email');
+            addedTopics.add('email');
+        }
+        if (/\b(ifsc|ifsc code|branch code)\b/i.test(allHoneypotQuestions) && !addedTopics.has('ifsc')) {
+            alreadyAsked.push('✗ IFSC');
+            addedTopics.add('ifsc');
+        }
+        if (/\b(employee id|emp id|employee ID|staff id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('empid')) {
+            alreadyAsked.push('✗ employee ID');
+            addedTopics.add('empid');
+        }
+        if (/\b(callback|call back|callback number|contact number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
+            alreadyAsked.push('✗ callback');
+            addedTopics.add('callback');
+        }
+        if (/\b(branch address|full address|address of|located at)\b/i.test(allHoneypotQuestions) && !addedTopics.has('address')) {
+            alreadyAsked.push('✗ address');
+            addedTopics.add('address');
+        }
+        if (/\b(supervisor|manager|senior|supervisor.*name)\b/i.test(allHoneypotQuestions) && !addedTopics.has('supervisor')) {
+            alreadyAsked.push('✗ supervisor');
+            addedTopics.add('supervisor');
+        }
+        if (/\b(transaction id|transaction ID|txn id|txn ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('txnid')) {
+            alreadyAsked.push('✗ transaction ID');
+            addedTopics.add('txnid');
+        }
+        if (/\b(merchant|company|vendor|shop)\b/i.test(allHoneypotQuestions) && !addedTopics.has('merchant')) {
+            alreadyAsked.push('✗ merchant');
+            addedTopics.add('merchant');
+        }
+        if (/\b(upi|upi id|upi handle|upi ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('upi')) {
+            alreadyAsked.push('✗  UPI');
+            addedTopics.add('upi');
+        }
+        if (/\b(amount|how much|transaction amount|prize.*money|refund.*amount)\b/i.test(allHoneypotQuestions) && !addedTopics.has('amount')) {
+            alreadyAsked.push('✗ amount');
+            addedTopics.add('amount');
+        }
+        if (/\b(case id|reference id|reference number|case number|ref id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('caseid')) {
+            alreadyAsked.push('✗ case ID');
+            addedTopics.add('caseid');
+        }
+        if (/\b(department|which department|what department)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('dept')) {
+            alreadyAsked.push('✗ department');
+            addedTopics.add('dept');
+        }
+        if (/\b(name|who are you|what.*name|your name)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('name')) {
+            alreadyAsked.push('✗ name');
+            addedTopics.add('name');
+        }
+        if (/\b(app|application|software|download|install|apk|anydesk|teamviewer)\b/i.test(allHoneypotQuestions) && !addedTopics.has('app')) {
+            alreadyAsked.push('✗ app/software');
+            addedTopics.add('app');
+        }
+        if (/\b(link|website|url|domain)\b/i.test(allHoneypotQuestions) && !addedTopics.has('link')) {
+            alreadyAsked.push('✗ link/website');
+            addedTopics.add('link');
+        }
+        if (/\b(fee|payment|pay|processing fee)\b/i.test(allHoneypotQuestions) && !addedTopics.has('fee')) {
+            alreadyAsked.push('✗ fee/payment');
+            addedTopics.add('fee');
+        }
 
-    // Count how many times each topic was mentioned
-    const alreadyAsked = [];
-    const addedTopics = new Set();
+        // OTP tracking
+        const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
+        const otpMentionCount = (allHoneypotQuestions.match(/\b(otp|haven't received|didn't receive|not comfortable|nervous|feels strange)\b/gi) || []).length;
 
-    // Check each question type multiple times for accuracy
-    if (/\b(email|e-mail|email address)\b/i.test(allHoneypotQuestions) && !addedTopics.has('email')) {
-      alreadyAsked.push('✗ email address');
-      addedTopics.add('email');
-    }
-    if (/\b(ifsc|ifsc code|branch code)\b/i.test(allHoneypotQuestions) && !addedTopics.has('ifsc')) {
-      alreadyAsked.push('✗ IFSC code');
-      addedTopics.add('ifsc');
-    }
-    if (/\b(employee id|emp id|employee ID|staff id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('empid')) {
-      alreadyAsked.push('✗ employee ID');
-      addedTopics.add('empid');
-    }
-    if (/\b(callback|call back|callback number|contact number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
-      alreadyAsked.push('✗ callback number');
-      addedTopics.add('callback');
-    }
-    if (/\b(branch address|full address|address of|located at)\b/i.test(allHoneypotQuestions) && !addedTopics.has('address')) {
-      alreadyAsked.push('✗ branch address');
-      addedTopics.add('address');
-    }
-    if (/\b(supervisor|manager|senior|supervisor.*name)\b/i.test(allHoneypotQuestions) && !addedTopics.has('supervisor')) {
-      alreadyAsked.push('✗ supervisor name');
-      addedTopics.add('supervisor');
-    }
-    if (/\b(transaction id|transaction ID|txn id|txn ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('txnid')) {
-      alreadyAsked.push('✗ transaction ID');
-      addedTopics.add('txnid');
-    }
-    if (/\b(merchant|company|vendor|related to)\b/i.test(allHoneypotQuestions) && !addedTopics.has('merchant')) {
-      alreadyAsked.push('✗ merchant/company');
-      addedTopics.add('merchant');
-    }
-    if (/\b(upi|upi id|upi handle|upi ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('upi')) {
-      alreadyAsked.push('✗ UPI ID');
-      addedTopics.add('upi');
-    }
-    if (/\b(amount|how much|transaction amount)\b/i.test(allHoneypotQuestions) && !addedTopics.has('amount')) {
-      alreadyAsked.push('✗ amount');
-      addedTopics.add('amount');
-    }
-    if (/\b(case id|reference id|reference number|case number|ref id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('caseid')) {
-      alreadyAsked.push('✗ case/reference ID');
-      addedTopics.add('caseid');
-    }
-    if (/\b(department|which department|what department)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('dept')) {
-      alreadyAsked.push('✗ department');
-      addedTopics.add('dept');
-    }
-    if (/\b(name|who are you|what.*name|your name)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('name')) {
-      alreadyAsked.push('✗ name');
-      addedTopics.add('name');
-    }
+        // Scammer asking for OTP?
+        const scammerAsksOTP = /\b(otp|pin|password|cvv|code|send|share|provide)\b/i.test(scammerMessage);
 
-    // Check if honeypot mentioned OTP already
-    const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want to share)\b/i.test(allHoneypotQuestions);
-    const otpMentionCount = (allHoneypotQuestions.match(/\b(otp|haven't received|didn't receive|not comfortable)\b/gi) || []).length;
-
-    // Detect if scammer is asking for OTP
-    const scammerAsksOTP = /\b(otp|pin|password|cvv|code|send|share)\b/i.test(scammerMessage);
-
-    const userPrompt = `CONVERSATION SO FAR:
+        const userPrompt = `CONVERSATION SO FAR:
 ${conversationContext}
 
 SCAMMER'S NEW MESSAGE: "${scammerMessage}"
 
-🚫 YOU ALREADY ASKED ABOUT:
-${alreadyAsked.length > 0 ? alreadyAsked.join(', ') : 'Nothing yet'}
+🚫 YOU ALREADY ASKED: ${alreadyAsked.join(', ') || 'Nothing yet'}
 
-${scammerAsksOTP && otpMentionCount < 3 ? `⚠️ SCAMMER IS ASKING FOR OTP/PASSWORD!
-Respond naturally:
-- ${otpMentionCount === 0 ? '"I haven\'t received any OTP yet. What\'s [NEW QUESTION]?"' : ''}
-- ${otpMentionCount === 1 ? '"I\'m not comfortable sharing that. Can you tell me [NEW QUESTION]?"' : ''}
-- ${otpMentionCount >= 2 ? '"That seems unusual. I need to verify this first. What\'s [NEW QUESTION]?"' : ''}
+${scammerAsksOTP && otpMentionCount < 4 ? `⚠️ SCAMMER WANTS OTP/PASSWORD!
+Respond SUBTLY (not direct):
+${otpMentionCount === 0 ? '→ "I haven\'t received any OTP yet... What\'s [NEW]?"' : ''}
+${otpMentionCount === 1 ? '→ "The SMS hasn\'t arrived. Can you tell me [NEW]?"' : ''}
+${otpMentionCount === 2 ? '→ "I\'m nervous about this. My bank said never share OTP... What\'s [NEW]?"' : ''}
+${otpMentionCount >= 3 ? '→ "This doesn\'t feel right. Can I call the bank to verify? What\'s [NEW]?"' : ''}
 ` : ''}
 
-✅ ASK ABOUT SOMETHING COMPLETELY NEW:
-Choose from topics you HAVEN'T asked:
-${!addedTopics.has('email') ? '✓ Official email address' : ''}
+✅ ASK SOMETHING COMPLETELY NEW:
+${!addedTopics.has('email') ? '✓ Official email' : ''}
 ${!addedTopics.has('ifsc') ? '✓ IFSC code' : ''}
 ${!addedTopics.has('empid') ? '✓ Employee ID' : ''}
 ${!addedTopics.has('callback') ? '✓ Callback number' : ''}
-${!addedTopics.has('address') ? '✓ Branch full address' : ''}
+${!addedTopics.has('address') ? '✓ Branch address' : ''}
 ${!addedTopics.has('supervisor') ? '✓ Supervisor name' : ''}
 ${!addedTopics.has('txnid') ? '✓ Transaction ID' : ''}
-${!addedTopics.has('merchant') ? '✓ Merchant/company name' : ''}
-${!addedTopics.has('upi') ? '✓ UPI ID/handle' : ''}
-${!addedTopics.has('amount') ? '✓ Transaction amount' : ''}
-${!addedTopics.has('caseid') ? '✓ Case/reference ID' : ''}
-${!addedTopics.has('dept') ? '✓ Department name' : ''}
-${!addedTopics.has('name') ? '✓ Person name' : ''}
+${!addedTopics.has('merchant') ? '✓ Merchant name' : ''}
+${!addedTopics.has('upi') ? '✓ UPI ID' : ''}
+${!addedTopics.has('amount') ? '✓ Amount' : ''}
+${!addedTopics.has('caseid') ? '✓ Case ID' : ''}
+${!addedTopics.has('dept') ? '✓ Department' : ''}
+${!addedTopics.has('name') ? '✓ Name' : ''}
+${!addedTopics.has('app') ? '✓ App/software name' : ''}
+${!addedTopics.has('link') ? '✓ Link/website' : ''}
+${!addedTopics.has('fee') ? '✓ Fee/payment amount' : ''}
 
-💬 RESPOND NATURALLY & RELATABLY:
-- Acknowledge what scammer just said
-- ${scammerAsksOTP ? 'Refuse OTP naturally (vary your response)' : 'Show slight concern'}
-- Then ask about ONE NEW topic
-- Sound like a worried human, not a bot
+💬 RESPOND NATURALLY:
+1. React to what scammer JUST said
+2. Show genuine emotion (worry/fear/confusion)
+3. Ask ONE NEW thing that relates to their message
 
-EXAMPLES:
-- "I understand the urgency, but I haven't received any OTP. What's your [NEW TOPIC]?"
-- "That's concerning. What's the [NEW TOPIC]?"
-- "I'm worried about this. Can you tell me [NEW TOPIC]?"
+Generate JSON:`
 
-Generate your JSON response:`;
+        try {
+            console.log('⏱️ Calling OpenAI...');
 
-    try {
-      console.log('⏱️ Calling OpenAI...');
+            const completion = await this.openai.chat.completions.create({
+                model: 'gpt-4',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.7,
+                max_tokens: 800
+            });
 
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 800
-      });
+            const llmTime = Date.now() - startTime;
+            console.log(`⏱️ LLM responded in ${llmTime}ms`);
 
-      const llmTime = Date.now() - startTime;
-      console.log(`⏱️ LLM responded in ${llmTime}ms`);
+            const rawResponse = completion.choices[0].message.content;
+            console.log('🤖 LLM Raw Response:', rawResponse);
 
-      const rawResponse = completion.choices[0].message.content;
-      console.log('🤖 LLM Raw Response:', rawResponse);
+            const agentResponse = JSON.parse(rawResponse);
 
-      const agentResponse = JSON.parse(rawResponse);
+            const finalResponse = {
+                reply: agentResponse.reply || "I'm confused about this. Can you provide more details?",
+                phase: agentResponse.phase || "VERIFICATION",
+                scamDetected: agentResponse.scamDetected || false,
+                intelSignals: agentResponse.intelSignals || {},
+                agentNotes: agentResponse.agentNotes || "",
+                shouldTerminate: agentResponse.shouldTerminate || false,
+                terminationReason: agentResponse.terminationReason || ""
+            };
 
-      // Final response
-      const finalResponse = {
-        reply: agentResponse.reply || "I need to verify this. Can you provide more details?",
-        phase: agentResponse.phase || "VERIFICATION",
-        scamDetected: agentResponse.scamDetected || false,
-        intelSignals: agentResponse.intelSignals || {},
-        agentNotes: agentResponse.agentNotes || "",
-        shouldTerminate: agentResponse.shouldTerminate || false,
-        terminationReason: agentResponse.terminationReason || ""
-      };
+            const totalTime = Date.now() - startTime;
+            console.log(`✅ Total response time: ${totalTime}ms`);
 
-      const totalTime = Date.now() - startTime;
-      console.log(`✅ Total response time: ${totalTime}ms`);
+            return finalResponse;
 
-      return finalResponse;
-
-    } catch (error) {
-      console.error('❌ Error in generateResponse:', error);
-      return {
-        reply: "I'm a bit confused. Can you provide more information about this?",
-        phase: "VERIFICATION",
-        scamDetected: true,
-        intelSignals: {},
-        agentNotes: `Error occurred: ${error.message}`,
-        shouldTerminate: false,
-        terminationReason: ""
-      };
+        } catch (error) {
+            console.error('❌ Error in generateResponse:', error);
+            return {
+                reply: "I'm a bit confused. Can you provide more information?",
+                phase: "VERIFICATION",
+                scamDetected: true,
+                intelSignals: {},
+                agentNotes: `Error occurred: ${error.message}`,
+                shouldTerminate: false,
+                terminationReason: ""
+            };
+        }
     }
-  }
 }
 
 module.exports = HoneypotAgent;
