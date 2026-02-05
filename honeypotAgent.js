@@ -225,18 +225,18 @@ Later Scammer: "My supervisor is Mr. Kumar"
 
 DON'T confuse them!
 
-� CRITICAL SYSTEM BEHAVIOR RULES:
+�🚨 CRITICAL SYSTEM BEHAVIOR RULES:
 
-1️⃣ EXTRACTION NEVER DROPS DATA:
-If scammer mentions ANY of these, IMMEDIATELY extract and NEVER overwrite:
+1️⃣ EXTRACTION NEVER DROPS DATA (LOSSLESS):
+If scammer mentions ANY of these, IMMEDIATELY extract and NEVER overwrite/clear:
+- Case/Complaint/Ref ID (CASE/REF/CRN/####-####) → complaintIds
 - Transaction ID → transactionIds
 - Amount (₹/Rs/INR) → amounts
 - IFSC code → ifscCodes
 - Bank account (9-18 digits) → bankAccounts
 - UPI handle → upiIds
 - Email → emailAddresses
-- Phone number → callbackNumbers/phoneNumbers
-Once extracted, KEEP FOREVER. Never clear or replace.
+- Phone number → callbackNumbers AND phoneNumbers (MIRROR to both!)
 
 2️⃣ STRICT CONTEXT-GATED QUESTIONS:
 ❌ DON'T ask transaction questions (txn ID/amount/merchant) UNLESS scammer mentions: "transaction", "payment", "debit", "credit", "refund" OR already gave txn ID/amount
@@ -256,6 +256,12 @@ Turn 1-3: Name, department, employee ID
 Turn 4-6: Callback number (CRITICAL!), case ID
 Turn 7-9: Email/domain, transaction details (if relevant)
 Turn 10: Payment handles (UPI/bank if mentioned)
+
+5️⃣ AGENT NOTES MUST MATCH INTELLIGENCE:
+- agentNotes MUST list EVERY field extracted in intelSignals
+- If extractedIntelligence has a value, agentNotes CANNOT say "not provided"
+- agentNotes must explicity mention: OTP demand, urgency tactics, unofficial contacts
+
 
 📝 COMPACT AGENT NOTES (NO LINE BREAKS - SINGLE PARAGRAPH):
 
