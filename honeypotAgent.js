@@ -366,7 +366,7 @@ SCAMMER SAYS: "${scammerMessage}"
 
 NEXT QUESTION: ${nextTarget}
 
-SOUND HUMAN! Use natural, conversational language!
+SOUND HUMAN! Be natural and conversational. Adapt to whatever bank/company the scammer mentions.
 
 ${askedAboutRef ? '⚠️ You ALREADY asked about reference number - DO NOT ask again!' : ''}
 ${askedAboutName ? '⚠️ You ALREADY asked about name - DO NOT ask again!' : ''}
@@ -375,10 +375,10 @@ ${askedAboutPhone ? '⚠️ You ALREADY asked about phone number - DO NOT ask ag
 ${askedAboutEmail ? '⚠️ You ALREADY asked about email - DO NOT ask again!' : ''}
 ${askedAboutTxn ? '⚠️ You ALREADY asked about transaction - DO NOT ask again!' : ''}
 
-NATURAL EXAMPLES (pick similar style):
-${nextTarget === 'Case/Reference ID' ? '"I didn\'t get any notification from SBI. Can you provide a case reference number?"' : ''}
+NATURAL EXAMPLES (adapt to scammer's bank/context):
+${nextTarget === 'Case/Reference ID' ? '"I didn\'t receive any notification about this. Can you provide a case reference number?"' : ''}
 ${nextTarget === 'Scammer full name' && !scammerAsksOTP ? '"I see. Can you tell me your name and which branch you work at?"' : ''}
-${nextTarget === 'Scammer full name' && scammerAsksOTP && turnNumber <= 2 ? '"I didn\'t receive any OTP. Can you tell me your full name?"' : ''}
+${nextTarget === 'Scammer full name' && scammerAsksOTP && turnNumber <= 2 ? '"I haven\'t received any OTP. What is your full name?"' : ''}
 ${nextTarget === 'Scammer full name' && scammerAsksOTP && turnNumber > 2 ? '"I\'m not comfortable sharing that. What is your name?"' : ''}
 ${nextTarget === 'Department name' && !scammerAsksOTP ? '"Thank you. Which department are you calling from?"' : ''}
 ${nextTarget === 'Department name' && scammerAsksOTP ? '"I don\'t think I should share my OTP. Which department are you from?"' : ''}
