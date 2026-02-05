@@ -445,7 +445,7 @@ ${actualQuestionsAsked.length > 0 ? actualQuestionsAsked.join('\n') : 'None yet'
 ${turnNumber === 1 ? `1️⃣ INITIAL SHOCK: Respond with FEAR/ALARM. ("Oh god", "This is alarming", "I'm really worried")` : ''}
 ${bankAccountHint ? `2️⃣ MONEY REACTION: You just saw a bank account/amount! ESCALATE EMOTION! ("That much money?!", "This is serious...")` : ''}
 ${moneyMentioned && turnNumber > 1 ? `3️⃣ MONEY SHOCK: Scammer mentioned money/amount. REACT WITH SURPRISE/FEAR! ("₹[amount]?! That is a big amount...", "How did this happen?")` : ''}
-${turnNumber > 1 && !moneyMentioned ? `4️⃣ CAUTIOUS VERIFICATION: Sound confused but slower. Ask specific details to verify identity.` : ''}
+${turnNumber > 1 && !moneyMentioned ? `4️⃣ CALM VERIFICATION: BE PRACTICAL. STOP saying "I'm worried", "I'm confused", "Oh god". Just ask the question politely. Example: "Sir, what is your [question]?"` : ''}
 ${turnNumber >= 8 ? `5️⃣ FINAL HESITATION: Tone down. Sound like you want to call bank independently. ("I need to confirm first...", "Let me check once...")` : ''}
 
 → AFTER reacting, ask ONE new verification question.
