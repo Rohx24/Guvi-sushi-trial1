@@ -359,6 +359,12 @@ EXAMPLE RESPONSES:
 
 Generate JSON asking ONLY for: ${nextTarget}`;
 
+    // DEBUG: Log extraction state
+    console.log('🔍 EXTRACTION STATE:', JSON.stringify(extractionState, null, 2));
+    console.log('✅ Already have:', alreadyHave.join(', ') || 'Nothing');
+    console.log('❌ Still missing:', missingItems.join(', '));
+    console.log('🎯 Next target:', nextTarget);
+
     try {
       console.log('⏱️ Calling OpenAI...');
 
