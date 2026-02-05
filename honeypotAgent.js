@@ -332,32 +332,49 @@ REMEMBER:
     if (extractionState.ifscCode) alreadyHave.push('IFSC');
     if (extractionState.branchLocation) alreadyHave.push('Branch');
 
-    const userPrompt = `CONVERSATION SO FAR:
+    // Extract what honeypot already asked from conversation
+    const honeypotQuestions = conversationHistory
+      .map(msg => msg.agentReply)
+      .filter(reply => reply)
+      .join(' ')
+      .toLowerCase();
+
+    const askedAboutRef = /reference|case|complaint|ticket/i.test(honeypotQuestions);
+    const askedAboutName = /name|who are you/i.test(honeypotQuestions);
+    const askedAboutDept = /department|team/i.test(honeypotQuestions);
+    const askedAboutPhone = /number|call.*back|contact/i.test(honeypotQuestions);
+    const askedAboutEmail = /email|send.*email/i.test(honeypotQuestions);
+
+    // Detect OTP request
+    const scammerAsksOTP = /otp|pin|password|cvv|code/i.test(scammerMessage);
+
+    const userPrompt = `RECENT CONVERSATION:
 ${conversationContext}
 
-NEW MESSAGE FROM SCAMMER: "${scammerMessage}"
+SCAMMER'S NEW MESSAGE: "${scammerMessage}"
+${scammerAsksOTP ? '\n⚠️ SCAMMER IS ASKING FOR OTP/PASSWORD!\n' : ''}
 
-ANALYSIS OF WHAT YOU ALREADY ASKED:
-${alreadyHave.length > 0 ? '✅ ALREADY ASKED/GOT: ' + alreadyHave.join(', ') : '❌ Nothing extracted yet'}
+WHAT YOU ALREADY ASKED (DO NOT REPEAT):
+${askedAboutRef ? '❌ Reference number (ASKED ALREADY)' : ''}
+${askedAboutName ? '❌ Name (ASKED ALREADY)' : ''}
+${askedAboutDept ? '❌ Department (ASKED ALREADY)' : ''}
+${askedAboutPhone ? '❌ Phone number (ASKED ALREADY)' : ''}
+${askedAboutEmail ? '❌ Email (ASKED ALREADY)' : ''}
 
-🎯 YOUR NEXT QUESTION MUST BE ABOUT: ${nextTarget}
+YOUR RESPONSE MUST:
+${scammerAsksOTP ? '1. START with: "I cannot share my OTP/password"' : '1. Acknowledge scammer\'s message briefly'}
+2. Then ask ONLY about: ${nextTarget}
 
-STRICT RULES:
-1. READ the conversation above - DO NOT repeat any question you already asked
-2. Ask ONLY about: ${nextTarget}
-3. If scammer gave reference number - DO NOT ask for it again
-4. If scammer gave name - DO NOT ask for it again
+EXAMPLE RESPONSE:
+${scammerAsksOTP ? `"I cannot share my OTP. ${nextTarget === 'Department name' ? 'Which department are you from?' : nextTarget === 'Callback phone number' ? 'What is your callback number?' : nextTarget === 'Official email address' ? 'Can you email me from an official address?' : 'Can you provide more details?'}"` : ''}
+${!scammerAsksOTP && nextTarget === 'Case/Reference ID' ? '"I need to verify this. Can you provide the case reference number?"' : ''}
+${!scammerAsksOTP && nextTarget === 'Scammer full name' ? '"Thank you. What is your full name for verification?"' : ''}
+${!scammerAsksOTP && nextTarget === 'Department name' ? '"Thank you for that. Which department are you calling from?"' : ''}
+${!scammerAsksOTP && nextTarget === 'Callback phone number' ? '"I noted that. What is your official callback number?"' : ''}
+${!scammerAsksOTP && nextTarget === 'Official email address' ? '"Can you send this from an official email address?"' : ''}
+${!scammerAsksOTP && nextTarget === 'Transaction ID' ? '"What is the transaction ID you are referring to?"' : ''}
 
-EXAMPLE FOR "${nextTarget}":
-${nextTarget === 'Case/Reference ID' ? '"I need to verify this. Can you provide the case reference number?"' : ''}
-${nextTarget === 'Scammer full name' ? '"What is your full name for verification?"' : ''}
-${nextTarget === 'Department name' ? '"Which department are you calling from?"' : ''}
-${nextTarget === 'Callback phone number' ? '"What is your official callback number?"' : ''}
-${nextTarget === 'Official email address' ? '"Can you send this from an official email address?"' : ''}
-${nextTarget === 'Transaction ID' ? '"What is the transaction ID you are referring to?"' : ''}
-${nextTarget === 'Delay/Disengage' ? '"I will call the official helpline to verify this."' : ''}
-
-Generate JSON response asking ONLY about: ${nextTarget}`;
+Generate JSON response:`;
 
     // DEBUG: Log extraction state
     console.log('🔍 EXTRACTION STATE:', JSON.stringify(extractionState, null, 2));
