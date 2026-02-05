@@ -61,15 +61,25 @@ Turn 8: IFSC code + branch location
 Turn 9: Final verification ("I will call official helpline", "Need to verify with family")
 Turn 10: Soft delay ("Cannot access app", "OTP delayed")
 
-REALISTIC RESPONSES (Calm, Defensive):
-✅ "I didn't receive any notification. Can you provide the case reference number and your full name?"
-✅ "I cannot share my OTP. Please give me your department name and official callback number."
-✅ "I need to verify this. What's the official email address and subject line for this alert?"
-✅ "My banking app isn't working. What's the transaction ID, merchant name, and amount?"
-✅ "I cannot access my account right now. Can you send the verification link or domain?"
-✅ "I will call the official helpline. What's your employee ID and supervisor's name?"
+CRITICAL RESPONSE PATTERN:
+1. If scammer asks for OTP → FIRST say "I cannot share my OTP" THEN ask the next question
+2. ACKNOWLEDGE what scammer said before asking your question
+3. Relate your response to their message
+
+RESPONSE TEMPLATES:
+✅ When scammer asks for OTP: "I cannot share my OTP right now. [Then ask next question]"
+✅ When scammer gives info: "Thank you for that information. [Then ask next question]"
+✅ When scammer pressures: "I understand the urgency, but I need to verify. [Then ask next question]"
+
+EXAMPLE RESPONSES:
+✅ "I cannot share my OTP. Can you provide your official callback number?"
+✅ "Thank you for the reference number. Which department are you calling from?"
+✅ "I understand the urgency, but I cannot share OTP. What's your official email address?"
+✅ "I noted the callback number. Can you send this from an official email?"
+✅ "Thank you for the transaction details. What is the UPI handle for any reversal?"
 
 ❌ DON'T: Repeat ANY question category once answered
+❌ DON'T: Ask for same info twice (if you asked for name, don't ask again)
 ❌ DON'T: Be confrontational ("You're a scammer!")
 ❌ DON'T: Use slang or casual language
 ❌ DON'T: Share OTP/PIN/password
@@ -332,32 +342,41 @@ REMEMBER:
     if (extractionState.ifscCode) alreadyHave.push('IFSC');
     if (extractionState.branchLocation) alreadyHave.push('Branch');
 
+    // Detect if scammer is asking for OTP
+    const scammerAsksForOTP = /otp|pin|password|cvv|send.*code|share.*code/i.test(scammerMessage);
+
     const userPrompt = `CONVERSATION SO FAR:
 ${conversationContext}
 
 NEW MESSAGE FROM SCAMMER: "${scammerMessage}"
 
-ANALYSIS OF WHAT YOU ALREADY ASKED:
-${alreadyHave.length > 0 ? '✅ ALREADY ASKED/GOT: ' + alreadyHave.join(', ') : '❌ Nothing extracted yet'}
+ANALYSIS:
+${alreadyHave.length > 0 ? '✅ ALREADY GOT: ' + alreadyHave.join(', ') : '❌ Nothing extracted yet'}
+${scammerAsksForOTP ? '⚠️ SCAMMER IS ASKING FOR OTP - You MUST refuse first!' : ''}
 
-🎯 YOUR NEXT QUESTION MUST BE ABOUT: ${nextTarget}
+🎯 YOUR NEXT QUESTION: ${nextTarget}
 
-STRICT RULES:
-1. READ the conversation above - DO NOT repeat any question you already asked
-2. Ask ONLY about: ${nextTarget}
-3. If scammer gave reference number - DO NOT ask for it again
-4. If scammer gave name - DO NOT ask for it again
+RESPONSE FORMAT:
+${scammerAsksForOTP ? '1. START with: "I cannot share my OTP right now." or "I will not share OTP."' : '1. Acknowledge what scammer said briefly'}
+2. Then ask about: ${nextTarget}
 
-EXAMPLE FOR "${nextTarget}":
-${nextTarget === 'Case/Reference ID' ? '"I need to verify this. Can you provide the case reference number?"' : ''}
-${nextTarget === 'Scammer full name' ? '"What is your full name for verification?"' : ''}
-${nextTarget === 'Department name' ? '"Which department are you calling from?"' : ''}
-${nextTarget === 'Callback phone number' ? '"What is your official callback number?"' : ''}
-${nextTarget === 'Official email address' ? '"Can you send this from an official email address?"' : ''}
-${nextTarget === 'Transaction ID' ? '"What is the transaction ID you are referring to?"' : ''}
-${nextTarget === 'Delay/Disengage' ? '"I will call the official helpline to verify this."' : ''}
+EXAMPLE RESPONSE:
+${scammerAsksForOTP && nextTarget === 'Callback phone number' ? '"I cannot share my OTP. What is your official callback number?"' : ''}
+${scammerAsksForOTP && nextTarget === 'Department name' ? '"I will not share OTP with anyone. Which department are you calling from?"' : ''}
+${scammerAsksForOTP && nextTarget === 'Official email address' ? '"I cannot share my OTP. Can you send this from an official email address?"' : ''}
+${scammerAsksForOTP && nextTarget === 'Transaction ID' ? '"I cannot share OTP. What is the transaction ID you are referring to?"' : ''}
+${!scammerAsksForOTP && nextTarget === 'Case/Reference ID' ? '"I need to verify this. Can you provide the case reference number?"' : ''}
+${!scammerAsksForOTP && nextTarget === 'Scammer full name' ? '"Thank you. What is your full name for verification?"' : ''}
+${!scammerAsksForOTP && nextTarget === 'Department name' ? '"Thank you for that. Which department are you calling from?"' : ''}
+${!scammerAsksForOTP && nextTarget === 'Callback phone number' ? '"I noted that. What is your official callback number?"' : ''}
+${!scammerAsksForOTP && nextTarget === 'UPI handle' ? '"Thank you. What is the UPI handle for any reversal?"' : ''}
+${nextTarget === 'Delay/Disengage' ? '"I will call the official helpline to verify this first."' : ''}
 
-Generate JSON response asking ONLY about: ${nextTarget}`;
+⚠️ FORBIDDEN:
+- DO NOT ask about: ${alreadyHave.join(', ') || 'N/A'}
+- DO NOT repeat any question from conversation above
+
+Generate JSON response:`;
 
     // DEBUG: Log extraction state
     console.log('🔍 EXTRACTION STATE:', JSON.stringify(extractionState, null, 2));
