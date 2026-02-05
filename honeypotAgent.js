@@ -281,17 +281,17 @@ OUTPUT (JSON):
   "intelSignals": {
     "bankAccounts": [],
     "accountLast4": [],
-    "complaintIds": [],
+    "complaintIds": ["EXTRACT CASE IDs HERE e.g. 4567AB"],
     "employeeIds": [],
-    "phoneNumbers": [],
+    "phoneNumbers": ["MUST MATCH callbackNumbers"],
     "callbackNumbers": [],
-    "upiIds": [],
+    "upiIds": ["EXTRACT UPI LIKE scammer@bank"],
     "phishingLinks": [],
     "emailAddresses": [],
     "appNames": [],
     "transactionIds": [],
     "merchantNames": [],
-    "amounts": [],
+    "amounts": ["EXTRACT ₹12,500"],
     "ifscCodes": [],
     "departmentNames": [],
     "designations": [],
@@ -303,7 +303,16 @@ OUTPUT (JSON):
   "agentNotes": "Scam type + scammer identity + what they wanted + urgency + ALL intel + red flags + scam indicators",
   "shouldTerminate": false,
   "terminationReason": ""
-}`;
+}
+
+⚠️ FINAL EXTRACTION CHECKLIST (BEFORE GENERATING JSON):
+1. Did scammer mention a Case ID / Ref No? → Add to complaintIds
+2. Did scammer mention a UPI ID? → Add to upiIds
+3. Did I extract a Callback Number? → COPY IT into phoneNumbers too!
+4. Did scammer mention Amount? → Add to amounts
+5. Did scammer mention IFSC? → Add to ifscCodes
+6. Did scammer mention Email? → Add to emailAddresses
+NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!`;
 
     // BULLETPROOF MEMORY: Extract ACTUAL questions asked
     const allHoneypotQuestions = conversationHistory
