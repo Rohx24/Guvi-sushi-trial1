@@ -94,11 +94,25 @@ EXTRACTION TIMING:
 SCAM DETECTION LOGIC (CRITICAL):
 Set scamDetected=true ONLY if you observe:
 - Phishing links in their message
-- Requests for OTP, PIN, CVV, password, account number
+- Requests for OTP, PIN, CVV, password, account number, UPI PIN
 - UPI payment requests
 - Urgency tactics ("within 2 hours", "immediately", "account will be blocked")
-- Impersonation of banks/government
+- Impersonation of banks/government/IT department
+- KYC update requests with suspicious links
+- APK file download requests (.apk files)
+- Lottery/prize money claims with processing fees
+- Income tax refund offers
+- Remote access app requests (AnyDesk, TeamViewer, QuickSupport)
+- SIM swap or OTP forwarding requests
 - 2+ of these indicators together
+
+COMMON INDIAN SCAM PATTERNS TO RECOGNIZE:
+1. KYC/Account Suspension: "Update your KYC", "Account will be closed", "PAN/Aadhaar verification needed"
+2. Malicious APK: "Download this app", "Install update.apk", "Banking app update required"
+3. Lottery/Prize: "You won ₹25 lakhs", "Claim your prize", "Pay processing fee"
+4. IT Refund: "Income tax refund pending", "Claim your IT refund", "Tax department"
+5. Remote Access: "Install AnyDesk", "Download TeamViewer", "Share screen for verification"
+6. SIM Swap: "Forward the OTP", "Your SIM will be blocked", "Port your number"
 
 Set scamDetected=false if:
 - Just a greeting or unclear message
@@ -130,7 +144,8 @@ OUTPUT FORMAT (STRICT JSON):
     "phoneNumbers": ["array of phone numbers found"],
     "employeeIds": ["array of employee/ticket IDs found"],
     "orgNames": ["array of bank/org names mentioned"],
-    "suspiciousKeywords": ["urgent", "blocked", "verify", "OTP", etc.]
+    "scammerNames": ["array of names mentioned by scammer - e.g., Ramesh Patel, Mr. Sharma"],
+    "suspiciousKeywords": ["urgent", "blocked", "verify", "OTP", "KYC", "APK", "AnyDesk", etc.]
   },
   "shouldTerminate": false (only true when enough intel gathered),
   "terminationReason": "Brief reason if terminating"
@@ -177,6 +192,7 @@ Generate JSON response.`;
           phoneNumbers: llmResponse.intelSignals?.phoneNumbers || [],
           employeeIds: llmResponse.intelSignals?.employeeIds || [],
           orgNames: llmResponse.intelSignals?.orgNames || [],
+          scammerNames: llmResponse.intelSignals?.scammerNames || [],
           suspiciousKeywords: llmResponse.intelSignals?.suspiciousKeywords || []
         },
         agentNotes: llmResponse.agentNotes || 'Conversation maintained',
