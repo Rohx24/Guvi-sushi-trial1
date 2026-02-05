@@ -6,25 +6,25 @@
 const { OpenAI } = require('openai');
 
 class HoneypotAgent {
-    constructor() {
-        this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY,
-        });
-        console.log('🤖 Natural Honeypot Agent initialized (GPT-4 handles everything)');
-    }
+  constructor() {
+    this.openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    console.log('🤖 Natural Honeypot Agent initialized (GPT-4 handles everything)');
+  }
 
-    async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
-        const startTime = Date.now();
-        console.log('⏱️ LLM Agent.generateResponse started');
+  async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
+    const startTime = Date.now();
+    console.log('⏱️ LLM Agent.generateResponse started');
 
-        // Build conversation context
-        const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
-            `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
-        ).join('\n\n');
+    // Build conversation context
+    const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
+      `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
+    ).join('\n\n');
 
-        const totalMessages = conversationHistory.length;
+    const totalMessages = conversationHistory.length;
 
-        const systemPrompt = `You are an AI playing the role of a confused, cautious person receiving a scam message.
+    const systemPrompt = `You are an AI playing the role of a confused, cautious person receiving a scam message.
 
 🎭 YOUR PERSONALITY:
 - Initially confused and worried ("What? I didn't receive any notification!")
@@ -107,7 +107,7 @@ OUTPUT (JSON):
   "terminationReason": ""
 }`;
 
-        const userPrompt = `CONVERSATION SO FAR:
+    const userPrompt = `CONVERSATION SO FAR:
 ${conversationContext}
 
 SCAMMER'S NEW MESSAGE: "${scammerMessage}"
@@ -124,57 +124,56 @@ REMEMBER:
 
 Generate your JSON response:`;
 
-        try {
-            console.log('⏱️ Calling OpenAI...');
+    try {
+      console.log('⏱️ Calling OpenAI...');
 
-            const completion = await this.openai.chat.completions.create({
-                model: 'gpt-4',
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.7,
-                max_tokens: 800,
-                response_format: { type: 'json_object' }
-            });
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 800
+      });
 
-            const llmTime = Date.now() - startTime;
-            console.log(`⏱️ LLM responded in ${llmTime}ms`);
+      const llmTime = Date.now() - startTime;
+      console.log(`⏱️ LLM responded in ${llmTime}ms`);
 
-            const rawResponse = completion.choices[0].message.content;
-            console.log('🤖 LLM Raw Response:', rawResponse);
+      const rawResponse = completion.choices[0].message.content;
+      console.log('🤖 LLM Raw Response:', rawResponse);
 
-            const agentResponse = JSON.parse(rawResponse);
+      const agentResponse = JSON.parse(rawResponse);
 
-            // Final response
-            const finalResponse = {
-                reply: agentResponse.reply || "I need to verify this. Can you provide more details?",
-                phase: agentResponse.phase || "VERIFICATION",
-                scamDetected: agentResponse.scamDetected || false,
-                intelSignals: agentResponse.intelSignals || {},
-                agentNotes: agentResponse.agentNotes || "",
-                shouldTerminate: agentResponse.shouldTerminate || false,
-                terminationReason: agentResponse.terminationReason || ""
-            };
+      // Final response
+      const finalResponse = {
+        reply: agentResponse.reply || "I need to verify this. Can you provide more details?",
+        phase: agentResponse.phase || "VERIFICATION",
+        scamDetected: agentResponse.scamDetected || false,
+        intelSignals: agentResponse.intelSignals || {},
+        agentNotes: agentResponse.agentNotes || "",
+        shouldTerminate: agentResponse.shouldTerminate || false,
+        terminationReason: agentResponse.terminationReason || ""
+      };
 
-            const totalTime = Date.now() - startTime;
-            console.log(`✅ Total response time: ${totalTime}ms`);
+      const totalTime = Date.now() - startTime;
+      console.log(`✅ Total response time: ${totalTime}ms`);
 
-            return finalResponse;
+      return finalResponse;
 
-        } catch (error) {
-            console.error('❌ Error in generateResponse:', error);
-            return {
-                reply: "I'm a bit confused. Can you provide more information about this?",
-                phase: "VERIFICATION",
-                scamDetected: true,
-                intelSignals: {},
-                agentNotes: `Error occurred: ${error.message}`,
-                shouldTerminate: false,
-                terminationReason: ""
-            };
-        }
+    } catch (error) {
+      console.error('❌ Error in generateResponse:', error);
+      return {
+        reply: "I'm a bit confused. Can you provide more information about this?",
+        phase: "VERIFICATION",
+        scamDetected: true,
+        intelSignals: {},
+        agentNotes: `Error occurred: ${error.message}`,
+        shouldTerminate: false,
+        terminationReason: ""
+      };
     }
+  }
 }
 
 module.exports = HoneypotAgent;
