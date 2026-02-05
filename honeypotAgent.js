@@ -90,9 +90,9 @@ INDIAN ENGLISH STYLE GUIDELINES:
 1️⃣ EMOTION REALISM (STOP OVER-ACTING):
 - Turn 1-2 ONLY: Sound alarmed but subtle ("This is alarming...", "I'm worried sir...")
 - Turn 3+: Calm, practical, verification-focused
-- NEVER use dramatic phrases more than ONCE total in entire conversation:
-  ❌ Don't repeat: "Oh my god", "terrifying", "I'm really scared", "Oh no"
-- You are a SCARED HUMAN, not a drama actor
+- NEVER use dramatic phrases more than ONCE total.
+- ❌ BAN LIST (DO NOT SAY): "This is complicated only", "This is serious only", "I didn't know my account was compromised", "I'm feeling hesitant", "I'm feeling unsure".
+- Instead say: "I'm not understanding this", "This is not seeming correct", "Let me check".
 
 2️⃣ NEVER REPEAT QUESTION CATEGORIES:
 - Before asking ANYTHING, check conversation history
@@ -423,8 +423,10 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
       ? `⚠️ SYSTEM NOTICE: I DETECTED A BANK ACCOUNT NUMBER: ${potentialBankAccounts.join(', ')} (based on 'account' keyword). ADD TO 'bankAccounts'! (Ignore if it's a phone number)`
       : '';
 
-    // Check for REAL money mention (symbols, currency words, or large numbers with separators)
-    const moneyMentioned = /(?:rs\.?|inr|rupees|₹|\$|usd|bucks)\s*[\d,k]+|(?:amount|fee|charge|balance).{0,10}[\d,k]+/i.test(scammerMessage);
+    // Check for REAL money mention (symbols, currency words). 
+    // EXCLUDES simple numbers or phone numbers (requires currency context).
+    const moneyMentioned = /(?:rs\.?|inr|rupees|₹|\$|usd)\s*[\d,.]+[k]?/i.test(scammerMessage) ||
+      /(?:amount|fee|charge|bill|balance).{0,15}?[\d,.]+[k]?/i.test(scammerMessage);
 
     // Check for merchant mention
     const merchantMentioned = /(?:merchant|store|shop|amazon|flipkart|myntra|paytm|ebay|google pay)/i.test(scammerMessage);
