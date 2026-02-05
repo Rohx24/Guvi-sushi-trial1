@@ -312,11 +312,12 @@ OUTPUT (JSON):
 4. Did scammer mention Amount? → Add to amounts
 5. Did scammer mention IFSC? → Add to ifscCodes
 6. Did scammer mention Email? → Add to emailAddresses
-7. ⚠️ DID SCAMMER MENTION ANY NUMBER WITH 9-18 DIGITS? (e.g. 123456789012) → IT IS A BANK ACCOUNT! Add to 'bankAccounts' immediately!
+7. Did text say "account number"/"acc no" followed by 9-18 digits? → Add to bankAccounts. (IGNORE phone numbers/employee IDs here!)
 NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
 
 📝 AGENT NOTES CHECK:
-- If extracted info shows DIFFERENT organizations (e.g. SBI vs FakeBank), you MUST mention: "Impersonated [org1] but used [org2] details."`;
+- If extracted info shows DIFFERENT organizations (e.g. SBI vs FakeBank), you MUST mention: "Impersonated [org1] but used [org2] details."
+- If UPI domain (@...) doesn't match claimed Bank (SBI vs @paytm), write "identity/UPI mismatch".`;
 
     // BULLETPROOF MEMORY: Extract ACTUAL questions asked
     const allHoneypotQuestions = conversationHistory
@@ -412,10 +413,14 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
     // Scammer asking for OTP?
     const scammerAsksOTP = /\b(otp|pin|password|cvv|code|send|share|provide)\b/i.test(scammerMessage);
 
-    // HINT: Check for potential bank account numbers (9-18 digits)
-    const potentialBankAccounts = scammerMessage.match(/\b\d{9,18}\b/g) || [];
+    // HINT: Check for potential bank account numbers (9-18 digits) WITH CONTEXT
+    // Looks for "account", "acc", "no", "number" within reasonable distance of digits
+    const accountContextRegex = /(?:account|acc|acct|a\/c)[\s\w.:#-]{0,20}?(\d{9,18})/gi;
+    const matches = [...scammerMessage.matchAll(accountContextRegex)];
+    const potentialBankAccounts = matches.map(m => m[1]); // Extract only the number part
+
     const bankAccountHint = potentialBankAccounts.length > 0
-      ? `⚠️ SYSTEM NOTICE: I DETECTED A POTENTIAL BANK ACCOUNT NUMBER: ${potentialBankAccounts.join(', ')}. EXTRACT THIS INTO 'bankAccounts' IMMEDIATELY!`
+      ? `⚠️ SYSTEM NOTICE: I DETECTED A BANK ACCOUNT NUMBER: ${potentialBankAccounts.join(', ')} (based on 'account' keyword). ADD TO 'bankAccounts'! (Ignore if it's a phone number)`
       : '';
 
     const userPrompt = `CONVERSATION SO FAR:
