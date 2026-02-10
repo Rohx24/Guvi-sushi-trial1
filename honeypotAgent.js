@@ -43,23 +43,23 @@ ALWAYS follow this pattern:
 AUTHENTIC INDIAN STYLE EXAMPLES:
 
 Scammer: "Your account has unauthorized transaction of ₹10,000!"
-You: "₹10,000?! But I didn't do any transaction sir! I’m noting this down — what name and department should I write?"
+You: "₹10,000?! But I didn't do any transaction sir! Who are you actually? Which department you are calling from?"
 
 Scammer: "I'm Rajesh from SBI Fraud Prevention"
-You: "Oh Rajesh sir... I'll write it in my notes — what staff/employee ID are you telling from?"
+You: "Oh Rajesh sir, I'm getting very scared now. Please tell me your employee ID so I can confirm this is real only?"
 
 Scammer: "My ID is EMP123. We need your OTP immediately!"
-You: "EMP123... okay sir. Signal is weak — which number should I call you back on?"
+You: "EMP123... okay sir. But one minute, I'm not getting any OTP message only. What is your callback number please?"
 
 Scammer: "Call +91-9876543210. Send OTP now!"
-You: "Sir I'm very confused. So I don’t mix it up, what’s the transaction ID you’re seeing?"
+You: "Sir I'm very confused. My bank always told me not to share OTP with anyone. Can you please tell me the transaction ID first?"
 
 MORE EXAMPLES:
-- "My app shows a branch code thing — what IFSC is this tagged to?"
-- "If the call drops, which email should I mention when I call the bank?"
-- "I’m trying to match what’s showing on my screen — what amount is it showing there?"
-- "What address should I note for that branch?"
-- "If I need to escalate, whose name should I mention?"
+- "Sir, I'm not understanding this properly. What is the IFSC code of your branch?"
+- "Actually I'm very worried now. Can you kindly tell me your official email ID?"
+- "But sir, this is very sudden only. What is the merchant name for this transaction?"
+- "One minute sir, which branch you are calling from? Please tell the full address."
+- "Sir I'm feeling this is not right. Let me verify first. What is your supervisor's name?"
 
 🚫 SUBTLE, INDIAN STYLE OTP/PIN REFUSALS:
 DON'T say: "I cannot share my OTP" (too direct, American)
@@ -535,7 +535,7 @@ Generate JSON:`;
       const agentResponse = JSON.parse(rawResponse);
 
       const finalResponse = {
-        reply: this.enhanceReply(agentResponse.reply || "I'm confused about this. Can you provide more details?", conversationHistory),
+        reply: agentResponse.reply || "I'm confused about this. Can you provide more details?",
         phase: agentResponse.phase || "VERIFICATION",
         scamDetected: agentResponse.scamDetected || false,
         intelSignals: agentResponse.intelSignals || {},
@@ -552,7 +552,7 @@ Generate JSON:`;
     } catch (error) {
       console.error('❌ Error in generateResponse:', error);
       return {
-        reply: "I'm a bit confused. Can you say that again?",
+        reply: "I'm a bit confused. Can you provide more information?",
         phase: "VERIFICATION",
         scamDetected: true,
         intelSignals: {},
@@ -561,116 +561,6 @@ Generate JSON:`;
         terminationReason: ""
       };
     }
-  }
-
-  /**
-   * REWRITE ENGINE: Enforces natural human phrasing
-   * Adds rotating reasons, soft openers, and removes "bot-speak"
-   */
-  enhanceReply(rawReply, conversationHistory) {
-    // 1. HARD RULES - Banned words that trigger immediate rewrite
-    const bannedWords = ['provide', 'official', 'confirm your identity', 'verify you', 'prove', 'as per policy', 'kindly'];
-    const hasBannedWord = bannedWords.some(word => rawReply.toLowerCase().includes(word));
-
-    // 2. INTENT DETECTION - Map LLM's question to a specific intent
-    // We prioritize specific intents over generic ones
-    let intent = null;
-    const lowerReply = rawReply.toLowerCase();
-
-    if (/(name|who are you|department)/i.test(lowerReply) && !lowerReply.includes('merchant')) intent = 'name_dept';
-    else if (/(employee|staff|badge).{0,10}id/i.test(lowerReply)) intent = 'emp_id';
-    else if (/(email|mail)/i.test(lowerReply)) intent = 'email';
-    else if (/(call.*back|phone|number|contact)/i.test(lowerReply) && !lowerReply.includes('account')) intent = 'callback';
-    else if (/(case|reference|complaint).{0,10}id/i.test(lowerReply)) intent = 'case_id';
-    else if (/(ifsc|branch code)/i.test(lowerReply)) intent = 'ifsc';
-    else if (/(transaction|txn).{0,10}id/i.test(lowerReply)) intent = 'txn_id';
-    else if (/(amount|value|how much)/i.test(lowerReply) && !lowerReply.includes('account')) intent = 'amount';
-    else if (/(supervisor|boss|manager|senior)/i.test(lowerReply)) intent = 'supervisor';
-    else if (/(which|what).{0,10}branch/i.test(lowerReply)) intent = 'branch';
-    else if (/(address|location|where)/i.test(lowerReply) && lowerReply.includes('branch')) intent = 'address';
-
-    // If no intent detected or no banned words, we might keep it (but check for question mark count and length)
-    // However, if we HAVE an intent, we should enforce the "Human Verification Style" (Reason + Template)
-    if (!intent && !hasBannedWord) {
-      return this.cleanUpReply(rawReply);
-    }
-
-    // 3. ROTATION LOGIC - Prevent repetition of reasons/openers
-    const REASON_BANK = [
-      "I’m noting this down.",
-      "I don’t want to type the wrong detail.",
-      "I’m getting confused looking at the SMS.",
-      "My banking app is stuck right now.",
-      "Signal is weak, call might drop.",
-      "I have to tell my branch if they ask.",
-      "I’m trying to match what’s showing on my screen.",
-      "One second, I’m opening the app.",
-      "I’m writing the case details in Notes.",
-      "I might be mixing up the numbers."
-    ];
-
-    const SOFT_OPENERS = [
-      "Sir one sec...",
-      "Okay sir...",
-      "Just a moment...",
-      "Wait...",
-      "Give me two seconds..."
-    ];
-
-    // Check last 3 turns to filter used reasons/openers
-    const recentReplies = conversationHistory.slice(-3).map(msg => msg.agentReply || '').join(' ').toLowerCase();
-
-    const availableReasons = REASON_BANK.filter(r => !recentReplies.includes(r.toLowerCase().substring(0, 15))); // Check partial match
-    const availableOpeners = SOFT_OPENERS.filter(o => !recentReplies.includes(o.toLowerCase().substring(0, 5)));
-
-    // Pick random
-    const reason = availableReasons[Math.floor(Math.random() * availableReasons.length)] || REASON_BANK[0];
-    const opener = availableOpeners[Math.floor(Math.random() * availableOpeners.length)] || SOFT_OPENERS[0];
-
-    // 4. TEMPLATE SELECTION
-    let finalQuestion = "";
-
-    switch (intent) {
-      case 'name_dept': finalQuestion = "what name and department should I write?"; break;
-      case 'emp_id': finalQuestion = "what staff/employee ID are you telling from?"; break;
-      case 'email': finalQuestion = "which email should I mention when I call the bank?"; break;
-      case 'callback': finalQuestion = "which number should I call you back on?"; break;
-      case 'case_id': finalQuestion = "what reference/case ID is it showing on your side?"; break;
-      case 'ifsc': finalQuestion = "what IFSC is this tagged to?"; break;
-      case 'txn_id': finalQuestion = "what’s the transaction ID you’re seeing?"; break;
-      case 'amount': finalQuestion = "what amount is it showing there?"; break;
-      case 'supervisor': finalQuestion = "whose name should I mention?"; break;
-      case 'branch': finalQuestion = "which branch is this tagged to on your end?"; break;
-      case 'address': finalQuestion = "what address should I note for that branch?"; break;
-      default:
-        // Fallback if intent wasn't pure but had banned words: 
-        // Try to preserve the core question if possible, or generic
-        finalQuestion = "what details should I write down?";
-    }
-
-    // 5. CONSTRUCT REPLY
-    // Format: [Opener] [Reason] — [Question]
-    // Occasional variation: [Reason] — [Question] (skip opener 30% of time to be natural)
-    const useOpener = Math.random() > 0.3;
-    let enhancedReply = useOpener
-      ? `${opener} ${reason} — ${finalQuestion}`
-      : `${reason} — ${finalQuestion}`;
-
-    return enhancedReply;
-  }
-
-  cleanUpReply(reply) {
-    // Ensure exactly one question mark
-    let clean = reply.replace(/\?/g, '.'); // Remove all ?
-    if (!clean.endsWith('.')) clean += '.';
-    clean = clean.replace(/\.$/, '?'); // Add one at the end
-
-    // Remove banned phrases if any slipped through (without full rewrite)
-    clean = clean.replace(/please provide/gi, "tell me")
-      .replace(/verify your identity/gi, "check details")
-      .replace(/official/gi, "bank");
-
-    return clean;
   }
 }
 
