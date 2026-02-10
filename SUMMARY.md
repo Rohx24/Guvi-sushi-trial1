@@ -40,6 +40,9 @@ guvitry2/
   - Employee IDs
   - Organization names
   - Suspicious keywords
+  - **New:** Tracking IDs (Delivery Scam)
+  - **New:** Challan/Vehicle Numbers (Traffic Scam)
+  - **New:** Consumer Numbers (Electricity Scam)
 - ✅ Safe friction delays (never shares real OTP/PIN/CVV)
 - ✅ Scam detection logic
 - ✅ Auto-termination when sufficient intel gathered
