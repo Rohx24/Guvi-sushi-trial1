@@ -184,6 +184,21 @@ PRIORITY: phishing link (if any) → callback number → refund amount → bank 
 - "We need remote access to fix issue"
 Extract: app name (AnyDesk, TeamViewer, QuickSupport), why needed, employee ID
 
+**7. India Post/Delivery Scam (New)**
+- "Package held due to incomplete address"
+- "Click link to pay ₹10 fee for delivery"
+PRIORITY: phishing link/URL → tracking ID → callback number → fee amount
+
+**8. Fake Traffic Challan (New)**
+- "Unpaid traffic violation/challan pending"
+- "Pay immediately to avoid court/seizure"
+PRIORITY: phishing link → challan number → vehicle number → amount
+
+**9. Electricity Bill Disconnection (New)**
+- "Power will be disconnected tonight due to unpaid bill"
+- "Call this number immediately to update"
+PRIORITY: callback number (CRITICAL) → consumer number → unpaid amount → officer name
+
 🎯 WHAT TO EXTRACT (ask naturally based on scenario):
 General:
 - Scammer's name (person talking NOW)
@@ -202,6 +217,13 @@ Bank-specific:
 - Transaction amount
 - UPI handle
 - Bank account numbers they mention
+
+Utility/Govt-specific:
+- Tracking ID / Consignment Number (Post)
+- Challan Number (Traffic)
+- Vehicle Number (Traffic)
+- Consumer Number / CA Number (Electricity)
+- Officer Name (Electricity/Post)
 
 Scam-specific:
 - App names (.apk, AnyDesk, TeamViewer)
@@ -293,6 +315,10 @@ OUTPUT (JSON):
     "merchantNames": [],
     "amounts": ["EXTRACT ₹12,500"],
     "ifscCodes": [],
+    "challanNumbers": ["Traffic challan e.g. TN04..."],
+    "trackingIds": ["Delivery tracking ID"],
+    "consumerNumbers": ["Electricity consumer no"],
+    "vehicleNumbers": ["Vehicle number"],
     "departmentNames": [],
     "designations": [],
     "supervisorNames": [],
@@ -405,6 +431,18 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
       alreadyAsked.push('✗ fee/payment');
       addedTopics.add('fee');
     }
+    if (/\b(tracking id|consignment number|package id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('tracking')) {
+      alreadyAsked.push('✗ tracking ID');
+      addedTopics.add('tracking');
+    }
+    if (/\b(challan|violation number|vehicle number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('challan')) {
+      alreadyAsked.push('✗ challan/vehicle details');
+      addedTopics.add('challan');
+    }
+    if (/\b(consumer number|electricity id|ca number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('consumer')) {
+      alreadyAsked.push('✗ consumer/electricity number');
+      addedTopics.add('consumer');
+    }
 
     // OTP tracking
     const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
@@ -505,6 +543,9 @@ ${!addedTopics.has('name') ? '✓ Name' : ''}
 ${!addedTopics.has('app') ? '✓ App/software name' : ''}
 ${!addedTopics.has('link') ? '✓ Link/website' : ''}
 ${!addedTopics.has('fee') ? '✓ Fee/payment amount' : ''}
+${!addedTopics.has('tracking') ? '✓ Tracking ID (if delivery scam)' : ''}
+${!addedTopics.has('challan') ? '✓ Challan/Vehicle No (if traffic scam)' : ''}
+${!addedTopics.has('consumer') ? '✓ Consumer No (if electricity scam)' : ''}
 
 💬 RESPOND NATURALLY:
     1. React to what scammer JUST said
