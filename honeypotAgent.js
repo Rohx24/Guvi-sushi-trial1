@@ -127,6 +127,14 @@ ${intentList}`;
     return 0.7;
   }
 
+  getMaxTokensForTurn(turnNumber) {
+    // Replies are short; big latency spikes usually come from verbose JSON/agentNotes.
+    // Keep this conservative to improve response time while preserving output quality.
+    if (turnNumber <= 2) return 350;
+    if (turnNumber <= 6) return 420;
+    return 480;
+  }
+
   extractQuestionTopics(text) {
     if (!text || typeof text !== 'string') {
       return new Set();
@@ -1019,12 +1027,24 @@ Generate JSON:`;
       turnNumber
     );
 
+    const latencyControlPrompt = `LATENCY CONTROL (STRICT):
+- Output MUST be minified JSON (single line, no extra whitespace/newlines).
+- Keep "agentNotes" concise (max 280 characters) but include key extracted fields if present.
+- Do not add any extra keys beyond the specified JSON schema.
+- Keep empty arrays empty; do not invent values.`;
+
+    const envMaxTokens = Number(process.env.OPENAI_MAX_TOKENS);
+    const maxTokens = Number.isFinite(envMaxTokens) && envMaxTokens > 0
+      ? Math.floor(envMaxTokens)
+      : this.getMaxTokensForTurn(turnNumber);
+
     try {
       console.log('⏱️ Calling OpenAI...');
       console.log('🧭 Control inputs:', {
         nextIntent: normalizedNextIntent,
         stressScore: normalizedStressScore,
-        expectedPhase
+        expectedPhase,
+        maxTokens
       });
 
       const completion = await this.openai.chat.completions.create({
@@ -1032,11 +1052,12 @@ Generate JSON:`;
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'system', content: intentStressControlPrompt },
+          { role: 'system', content: latencyControlPrompt },
           { role: 'user', content: userPrompt },
           { role: 'user', content: `Apply runtime control strictly for this turn. Intent=${normalizedNextIntent}, StressScore=${normalizedStressScore}, ExpectedPhase=${expectedPhase}.` }
         ],
         temperature: this.getTemperatureForStress(normalizedStressScore),
-        max_tokens: 800
+        max_tokens: maxTokens
       });
 
       const llmTime = Date.now() - startTime;
