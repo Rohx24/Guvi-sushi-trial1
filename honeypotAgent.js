@@ -132,12 +132,30 @@ ${intentList}`;
       return new Set();
     }
 
+    const questions = this.extractQuestionSentences(text);
+    const topics = new Set();
+    for (const q of questions) {
+      for (const topic of this.extractTopicsFromQuestionText(q)) {
+        topics.add(topic);
+      }
+    }
+
+    return topics;
+  }
+
+  extractQuestionSentences(text) {
+    if (!text || typeof text !== 'string') return [];
+    return text.match(/[^.!?]*\?/g) || [];
+  }
+
+  extractTopicsFromQuestionText(questionText) {
+    const text = String(questionText || '');
     const topics = new Set();
     const checks = [
-      { key: 'email', regex: /\b(email|e-mail|email address)\b/i },
+      { key: 'email', regex: /\b(email|e-mail|email address|email id|mail id)\b/i },
       { key: 'ifsc', regex: /\b(ifsc|ifsc code|branch code)\b/i },
       { key: 'empid', regex: /\b(employee id|emp id|staff id)\b/i },
-      { key: 'callback', regex: /\b(callback|call back|callback number|contact number)\b/i },
+      { key: 'callback', regex: /\b(callback|call back|callback number|contact number|phone number|mobile number)\b/i },
       { key: 'address', regex: /\b(branch address|full address|address of|located at)\b/i },
       { key: 'supervisor', regex: /\b(supervisor|manager|senior)\b/i },
       { key: 'txnid', regex: /\b(transaction id|txn id)\b/i },
@@ -184,27 +202,103 @@ ${intentList}`;
     return true;
   }
 
-  pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext) {
-    const questionByTopic = {
-      callback: 'Can you please tell me your callback number for verification?',
-      empid: 'Can you please share your employee ID once?',
-      email: 'Can you please tell me your official email address?',
-      caseid: 'Can you please share your case ID or reference number?',
-      dept: 'Can you please tell me your exact department name?',
-      name: 'Can you please tell me your full name?',
-      link: 'Can you please share the exact secure link for verification?',
-      txnid: 'Can you please share the transaction ID related to this issue?',
-      amount: 'Can you please tell me the exact amount shown in this alert?',
-      upi: 'Can you please share the UPI handle linked to this verification process?',
-      supervisor: 'Can you please tell me your supervisor name for confirmation?',
-      ifsc: 'Can you please tell me the IFSC code of your branch?',
-      address: 'Can you please share your branch address for verification?',
-      merchant: 'Can you please tell me the merchant name for this transaction?',
-      app: 'Can you please tell me which app exactly I should use?',
-      tracking: 'Can you please share the tracking ID once?',
-      challan: 'Can you please share the challan number and vehicle number?',
-      consumer: 'Can you please share the consumer number once?',
-      fee: 'Can you please tell me the exact fee amount and payment method?'
+  pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions = new Set()) {
+    const variantsByTopic = {
+      callback: [
+        'Can you please tell me your callback number for verification?',
+        'Sir, can you share a contact number where I can call back?',
+        'Can you please share your phone number so I can verify this properly?'
+      ],
+      empid: [
+        'Can you please tell me your employee ID for verification?',
+        'Sir, what is your staff ID?',
+        'Can you please share your employee ID once so I can confirm?'
+      ],
+      email: [
+        'Can you please tell me your official email address for verification?',
+        'Sir, what is your official email ID?',
+        'Can you please share your email address so I can confirm this is real?'
+      ],
+      caseid: [
+        'Can you please share your case ID or reference number?',
+        'Sir, what is the reference number for this complaint?',
+        'Can you please tell me the case number so I can note it?'
+      ],
+      dept: [
+        'Can you please tell me your exact department name?',
+        'Sir, which department are you calling from?',
+        'Can you please tell me which team/department this is?'
+      ],
+      name: [
+        'Can you please tell me your full name?',
+        'Sir, what is your name?',
+        'Can you please share your name once for verification?'
+      ],
+      link: [
+        'Can you please share the exact secure link for verification?',
+        'Sir, can you send the verification website link once?',
+        'Can you please tell me the exact URL to verify this?'
+      ],
+      txnid: [
+        'Can you please share the transaction ID related to this issue?',
+        'Sir, what is the transaction reference number?',
+        'Can you please tell me the txn ID for this alert?'
+      ],
+      amount: [
+        'Can you please tell me the exact amount shown in this alert?',
+        'Sir, what amount is showing in this transaction?',
+        'Can you please tell me how much amount is involved?'
+      ],
+      upi: [
+        'Can you please share the UPI handle linked to this verification process?',
+        'Sir, which UPI ID should I use for this?',
+        'Can you please tell me the UPI ID/handle for this step?'
+      ],
+      supervisor: [
+        'Can you please tell me your supervisor name for confirmation?',
+        'Sir, who is your supervisor?',
+        'Can you please share your manager name once?'
+      ],
+      ifsc: [
+        'Can you please tell me the IFSC code of your branch?',
+        'Sir, what is the branch IFSC code?',
+        'Can you please share IFSC once for verification?'
+      ],
+      address: [
+        'Can you please share your branch address for verification?',
+        'Sir, what is the branch address?',
+        'Can you please tell me where your branch is located?'
+      ],
+      merchant: [
+        'Can you please tell me the merchant name for this transaction?',
+        'Sir, which merchant name is showing?',
+        'Can you please tell me the vendor/merchant details?'
+      ],
+      app: [
+        'Can you please tell me which app exactly I should use?',
+        'Sir, which app should I open for this verification?',
+        'Can you please tell me the app name you are asking me to use?'
+      ],
+      tracking: [
+        'Can you please share the tracking ID once?',
+        'Sir, what is the tracking/consignment number?',
+        'Can you please tell me the tracking number?'
+      ],
+      challan: [
+        'Can you please share the challan number and vehicle number?',
+        'Sir, what is the challan number for this?',
+        'Can you please tell me the challan/vehicle details?'
+      ],
+      consumer: [
+        'Can you please share the consumer number once?',
+        'Sir, what is the consumer/CA number?',
+        'Can you please tell me the electricity consumer number?'
+      ],
+      fee: [
+        'Can you please tell me the exact fee amount and payment method?',
+        'Sir, how much fee is there and how should I pay?',
+        'Can you please tell me the payment amount and mode?'
+      ]
     };
 
     const priorityTopics = [
@@ -212,31 +306,55 @@ ${intentList}`;
       'supervisor', 'ifsc', 'address', 'merchant', 'dept', 'name', 'app', 'tracking', 'challan', 'consumer', 'fee'
     ];
 
+    const normalizeQuestion = (q) => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
     for (const topic of priorityTopics) {
       if (askedTopics.has(topic)) continue;
       if (!this.shouldUseTopicForMessage(topic, scammerMessage, conversationContext)) continue;
-      return questionByTopic[topic];
+      const variants = variantsByTopic[topic] || [];
+      for (const v of variants) {
+        if (!recentQuestions.has(normalizeQuestion(v))) {
+          return v;
+        }
+      }
+      if (variants.length > 0) return variants[0];
     }
 
     // Last resort should still avoid generic "what details do I provide" loops.
     return 'Can you please share your case ID once so I can verify this properly?';
   }
 
-  enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext) {
+  getRecentQuestionSet(conversationHistory, limit = 6) {
+    const recent = (conversationHistory || []).slice(-limit);
+    const questions = recent
+      .flatMap(m => this.extractQuestionSentences(m.agentReply || ''))
+      .map(q => String(q).toLowerCase().replace(/\s+/g, ' ').trim());
+    return new Set(questions);
+  }
+
+  enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext, conversationHistory) {
     if (!reply || typeof reply !== 'string') {
       return "I'm a bit confused. Can you please share your employee ID for verification?";
     }
 
-    const replyTopics = this.extractQuestionTopics(reply);
-    const repeatedTopicFound = [...replyTopics].some(topic => askedTopics.has(topic));
-    const repeatedProcedure = replyTopics.has('procedure') && askedTopics.has('procedure');
+    const questionTopics = this.extractQuestionTopics(reply); // topics only from question text
+    const repeatedQuestionTopicFound = [...questionTopics].some(topic => askedTopics.has(topic));
+    const repeatedProcedure = questionTopics.has('procedure') && askedTopics.has('procedure');
 
-    if (!repeatedTopicFound && !repeatedProcedure) {
+    if (!repeatedQuestionTopicFound && !repeatedProcedure) {
       return reply;
     }
 
-    const replacementQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext);
-    return `Okay sir, I'm checking this properly. ${replacementQuestion}`;
+    const recentQuestions = this.getRecentQuestionSet(conversationHistory);
+    const replacementQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions);
+
+    // Preserve the model's original tone as much as possible: keep everything before the first question, then swap in a new question.
+    const qMatch = /[^.!?]*\?/.exec(reply);
+    const prefix = qMatch ? reply.slice(0, qMatch.index).trim() : reply.trim();
+    const safePrefix = prefix || "Sir, I'm getting confused only";
+    const punctuatedPrefix = /[.!?]$/.test(safePrefix) ? safePrefix : `${safePrefix}.`;
+
+    return `${punctuatedPrefix} ${replacementQuestion}`;
   }
 
   onlyDigits(value) {
@@ -713,7 +831,7 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
       alreadyAsked.push('✗ employee ID');
       addedTopics.add('empid');
     }
-    if (/\b(callback|call back|callback number|contact number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
+    if (/\b(callback|call back|callback number|contact number|phone number|mobile number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
       alreadyAsked.push('✗ callback');
       addedTopics.add('callback');
     }
@@ -950,7 +1068,8 @@ Generate JSON:`;
         finalResponse.reply,
         addedTopics,
         scammerMessage,
-        conversationContext
+        conversationContext,
+        conversationHistory
       );
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
