@@ -461,7 +461,6 @@ ${intentList}`;
       terminationReason: response.terminationReason || `Deterministic stop: turn=${turnNumber}, criticalIntelSignals=${criticalIntelCount}`
     };
   }
-
   async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
     const startTime = Date.now();
     console.log('⏱️ Agent.generateResponse started');
@@ -895,10 +894,6 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
       alreadyAsked.push('✗ consumer/electricity number');
       addedTopics.add('consumer');
     }
-    if (/\b(what (exact|specific)? ?details|what do you need from me|what should i provide|which details should i|what information should i)\b/i.test(allHoneypotQuestions) && !addedTopics.has('procedure')) {
-      alreadyAsked.push('✗ generic procedure/details');
-      addedTopics.add('procedure');
-    }
 
     // OTP tracking
     const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
@@ -912,9 +907,7 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
     // Looks for "account", "acc", "no", "number" within reasonable distance of digits
     const accountContextRegex = /(?:account|acc|acct|a\/c)[\s\w.:#-]{0,20}?(\d{9,18})/gi;
     const matches = [...scammerMessage.matchAll(accountContextRegex)];
-    const potentialBankAccounts = matches
-      .map(m => this.onlyDigits(m[1]))
-      .filter(acc => !this.isLikelyPhoneNumberDigits(acc)); // Skip likely phone numbers
+    const potentialBankAccounts = matches.map(m => m[1]); // Extract only the number part
 
     const bankAccountHint = potentialBankAccounts.length > 0
       ? `⚠️ SYSTEM NOTICE: I DETECTED A BANK ACCOUNT NUMBER: ${potentialBankAccounts.join(', ')} (based on 'account' keyword). ADD TO 'bankAccounts'! (Ignore if it's a phone number)`
@@ -941,7 +934,6 @@ ${actualQuestionsAsked.length > 0 ? actualQuestionsAsked.join('\n') : 'None yet'
 🚫 TOPICS ALREADY COVERED: ${alreadyAsked.join(', ') || 'None yet'}
 
 ⚠️ DO NOT ASK ABOUT THESE TOPICS AGAIN!
-${addedTopics.has('procedure') ? '\n🚫 HARD BAN: DO NOT ask generic "what details should I provide" again. Ask a specific field only.' : ''}
 
 🎭 EMOTION CONTROL (MANDATORY BEHAVIOR):
 ${turnNumber === 1 ? `1️⃣ INITIAL SHOCK: Respond with FEAR/ALARM. ("Oh god", "This is alarming", "I'm really worried")` : ''}
@@ -1073,7 +1065,6 @@ Generate JSON:`;
       );
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
-
       const totalTime = Date.now() - startTime;
       console.log(`✅ Total response time: ${totalTime} ms`);
 
