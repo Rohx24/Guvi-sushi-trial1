@@ -14,6 +14,39 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || 'honeypot-guvi-2026-secure-key';
 const GUVI_CALLBACK_URL = 'https://guvi-honeypot-tester.onrender.com';
+const CALLBACK_MAX_RETRIES = 3;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const sendFinalResultToGuvi = async (payload) => {
+    for (let attempt = 1; attempt <= CALLBACK_MAX_RETRIES; attempt++) {
+        try {
+            await axios.post(GUVI_CALLBACK_URL, payload, {
+                timeout: 5000,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': API_KEY
+                }
+            });
+            console.log(`✅ Successfully sent final result to GUVI (attempt ${attempt})`);
+            return true;
+        } catch (error) {
+            const status = error.response?.status;
+            const body = error.response?.data;
+            console.error(`❌ GUVI callback failed (attempt ${attempt}/${CALLBACK_MAX_RETRIES})`, {
+                status: status || 'no-status',
+                body: body || 'no-body',
+                message: error.message
+            });
+
+            if (attempt < CALLBACK_MAX_RETRIES) {
+                await sleep(300 * attempt);
+            }
+        }
+    }
+
+    return false;
+};
 
 // Middleware
 app.use(cors());
@@ -117,13 +150,17 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
         }));
 
         // Calculate stress score based on conversation length and urgency
-        const stressScore = Math.min(10, 5 + Math.floor(agentHistory.length / 2));
+        const computedStressScore = Math.min(10, 5 + Math.floor(agentHistory.length / 2));
+        const incomingStressScore = req.body?.stressScore ?? metadata?.stressScore;
+        const stressScore = incomingStressScore ?? computedStressScore;
 
         // Determine next intent based on conversation
-        const nextIntent = agentHistory.length === 0 ? 'clarify_procedure' :
+        const computedNextIntent = agentHistory.length === 0 ? 'clarify_procedure' :
             agentHistory.length < 3 ? 'request_details' :
                 agentHistory.length < 6 ? 'pretend_technical_issue' :
                     'maintain_conversation';
+        const incomingNextIntent = req.body?.nextIntent ?? metadata?.nextIntent;
+        const nextIntent = incomingNextIntent || computedNextIntent;
 
         // Generate agent response
         console.log('🤖 Calling agent.generateResponse with:', { text: message.text, historyLength: agentHistory.length, nextIntent, stressScore });
@@ -180,15 +217,7 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
 
                 console.log('📤 Sending to GUVI:', JSON.stringify(finalPayload, null, 2));
 
-                await axios.post(GUVI_CALLBACK_URL, finalPayload, {
-                    timeout: 5000,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': API_KEY
-                    }
-                });
-
-                console.log('✅ Successfully sent final result to GUVI');
+                await sendFinalResultToGuvi(finalPayload);
             } catch (callbackError) {
                 console.error('❌ Failed to send callback to GUVI:', callbackError.message);
                 // Don't fail the main response if callback fails

@@ -127,6 +127,223 @@ ${intentList}`;
     return 0.7;
   }
 
+  extractQuestionTopics(text) {
+    if (!text || typeof text !== 'string') {
+      return new Set();
+    }
+
+    const topics = new Set();
+    const checks = [
+      { key: 'email', regex: /\b(email|e-mail|email address)\b/i },
+      { key: 'ifsc', regex: /\b(ifsc|ifsc code|branch code)\b/i },
+      { key: 'empid', regex: /\b(employee id|emp id|staff id)\b/i },
+      { key: 'callback', regex: /\b(callback|call back|callback number|contact number)\b/i },
+      { key: 'address', regex: /\b(branch address|full address|address of|located at)\b/i },
+      { key: 'supervisor', regex: /\b(supervisor|manager|senior)\b/i },
+      { key: 'txnid', regex: /\b(transaction id|txn id)\b/i },
+      { key: 'merchant', regex: /\b(merchant|vendor|shop|store)\b/i },
+      { key: 'upi', regex: /\b(upi|upi id|upi handle)\b/i },
+      { key: 'amount', regex: /\b(amount|how much|transaction amount|refund amount|prize money)\b/i },
+      { key: 'caseid', regex: /\b(case id|reference id|reference number|case number|ref id)\b/i },
+      { key: 'dept', regex: /\b(department|which department|what department)\b/i },
+      { key: 'name', regex: /\b(who are you|your name|what.*name)\b/i },
+      { key: 'app', regex: /\b(app|application|software|download|install|apk|anydesk|teamviewer)\b/i },
+      { key: 'link', regex: /\b(link|website|url|domain)\b/i },
+      { key: 'fee', regex: /\b(fee|payment|pay|processing fee)\b/i },
+      { key: 'tracking', regex: /\b(tracking id|consignment number|package id)\b/i },
+      { key: 'challan', regex: /\b(challan|violation number|vehicle number)\b/i },
+      { key: 'consumer', regex: /\b(consumer number|electricity id|ca number)\b/i },
+      { key: 'procedure', regex: /\b(what (exact|specific)? ?details|what do you need from me|what should i provide|which details should i|what information should i)\b/i }
+    ];
+
+    for (const check of checks) {
+      if (check.regex.test(text)) {
+        topics.add(check.key);
+      }
+    }
+
+    return topics;
+  }
+
+  shouldUseTopicForMessage(topic, scammerMessage, conversationContext) {
+    const contextText = `${scammerMessage || ''} ${conversationContext || ''}`;
+
+    if (topic === 'upi') {
+      return /\b(upi|payment|refund|transfer|collect|reversal)\b/i.test(contextText);
+    }
+    if (topic === 'link') {
+      return /\b(link|website|url|click|download|verify)\b/i.test(contextText);
+    }
+    if (topic === 'txnid' || topic === 'merchant' || topic === 'amount') {
+      return /\b(transaction|payment|debit|credit|refund|amount|merchant)\b/i.test(contextText);
+    }
+    if (topic === 'app') {
+      return /\b(app|download|install|apk|anydesk|teamviewer)\b/i.test(contextText);
+    }
+
+    return true;
+  }
+
+  pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext) {
+    const questionByTopic = {
+      callback: 'Can you please tell me your callback number for verification?',
+      empid: 'Can you please share your employee ID once?',
+      email: 'Can you please tell me your official email address?',
+      caseid: 'Can you please share your case ID or reference number?',
+      dept: 'Can you please tell me your exact department name?',
+      name: 'Can you please tell me your full name?',
+      link: 'Can you please share the exact secure link for verification?',
+      txnid: 'Can you please share the transaction ID related to this issue?',
+      amount: 'Can you please tell me the exact amount shown in this alert?',
+      upi: 'Can you please share the UPI handle linked to this verification process?',
+      supervisor: 'Can you please tell me your supervisor name for confirmation?',
+      ifsc: 'Can you please tell me the IFSC code of your branch?',
+      address: 'Can you please share your branch address for verification?',
+      merchant: 'Can you please tell me the merchant name for this transaction?',
+      app: 'Can you please tell me which app exactly I should use?',
+      tracking: 'Can you please share the tracking ID once?',
+      challan: 'Can you please share the challan number and vehicle number?',
+      consumer: 'Can you please share the consumer number once?',
+      fee: 'Can you please tell me the exact fee amount and payment method?'
+    };
+
+    const priorityTopics = [
+      'callback', 'empid', 'email', 'caseid', 'link', 'txnid', 'amount', 'upi',
+      'supervisor', 'ifsc', 'address', 'merchant', 'dept', 'name', 'app', 'tracking', 'challan', 'consumer', 'fee'
+    ];
+
+    for (const topic of priorityTopics) {
+      if (askedTopics.has(topic)) continue;
+      if (!this.shouldUseTopicForMessage(topic, scammerMessage, conversationContext)) continue;
+      return questionByTopic[topic];
+    }
+
+    // Last resort should still avoid generic "what details do I provide" loops.
+    return 'Can you please share your case ID once so I can verify this properly?';
+  }
+
+  enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext) {
+    if (!reply || typeof reply !== 'string') {
+      return "I'm a bit confused. Can you please share your employee ID for verification?";
+    }
+
+    const replyTopics = this.extractQuestionTopics(reply);
+    const repeatedTopicFound = [...replyTopics].some(topic => askedTopics.has(topic));
+    const repeatedProcedure = replyTopics.has('procedure') && askedTopics.has('procedure');
+
+    if (!repeatedTopicFound && !repeatedProcedure) {
+      return reply;
+    }
+
+    const replacementQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext);
+    return `Okay sir, I'm checking this properly. ${replacementQuestion}`;
+  }
+
+  onlyDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  isLikelyPhoneNumberDigits(digits) {
+    if (!digits) return false;
+    if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) return true;
+    if (digits.length === 12 && /^91[6-9]\d{9}$/.test(digits)) return true;
+    return false;
+  }
+
+  formatPhoneNumber(value) {
+    const digits = this.onlyDigits(value);
+    if (!digits) return null;
+    if (digits.length === 10) return `+91-${digits}`;
+    if (digits.length === 12 && digits.startsWith('91')) return `+91-${digits.slice(2)}`;
+    return String(value).trim();
+  }
+
+  dedupeByKey(values, keyFn) {
+    const seen = new Set();
+    const output = [];
+    for (const value of values) {
+      const key = keyFn(value);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      output.push(value);
+    }
+    return output;
+  }
+
+  normalizeLink(value) {
+    if (!value || typeof value !== 'string') return null;
+    let cleaned = value.trim();
+    cleaned = cleaned.replace(/\s+/g, '');
+    cleaned = cleaned.replace(/[),.;]+$/g, '');
+    if (!cleaned) return null;
+    return cleaned;
+  }
+
+  sanitizeIntelSignals(intelSignals) {
+    const normalized = intelSignals && typeof intelSignals === 'object' ? { ...intelSignals } : {};
+    const asArray = (v) => (Array.isArray(v) ? v : []);
+
+    const callbackNumbers = this.dedupeByKey(
+      asArray(normalized.callbackNumbers).map(v => this.formatPhoneNumber(v)).filter(Boolean),
+      v => this.onlyDigits(v)
+    );
+    const phoneNumbers = this.dedupeByKey(
+      asArray(normalized.phoneNumbers).map(v => this.formatPhoneNumber(v)).filter(Boolean),
+      v => this.onlyDigits(v)
+    );
+
+    const mergedPhones = this.dedupeByKey(
+      [...callbackNumbers, ...phoneNumbers],
+      v => this.onlyDigits(v)
+    );
+
+    normalized.callbackNumbers = mergedPhones;
+    normalized.phoneNumbers = mergedPhones;
+
+    const phoneDigits = new Set(mergedPhones.map(v => this.onlyDigits(v)).filter(Boolean));
+    normalized.bankAccounts = this.dedupeByKey(
+      asArray(normalized.bankAccounts)
+        .map(v => this.onlyDigits(v))
+        .filter(v => v.length >= 9 && v.length <= 18)
+        .filter(v => !this.isLikelyPhoneNumberDigits(v))
+        .filter(v => !phoneDigits.has(v)),
+      v => v
+    );
+
+    let links = asArray(normalized.phishingLinks)
+      .map(v => this.normalizeLink(v))
+      .filter(Boolean);
+    links = this.dedupeByKey(links, v => v.toLowerCase());
+    links = links.filter(link => !links.some(other => other !== link && other.startsWith(link)));
+    normalized.phishingLinks = links;
+
+    return normalized;
+  }
+
+  computeCriticalIntelCount(intelSignals) {
+    if (!intelSignals || typeof intelSignals !== 'object') return 0;
+    const fields = ['callbackNumbers', 'phoneNumbers', 'phishingLinks', 'upiIds', 'bankAccounts', 'employeeIds', 'emailAddresses', 'transactionIds'];
+    return fields.reduce((count, field) => {
+      const values = Array.isArray(intelSignals[field]) ? intelSignals[field].filter(Boolean) : [];
+      return count + (values.length > 0 ? 1 : 0);
+    }, 0);
+  }
+
+  applyDeterministicTermination(response, turnNumber) {
+    const criticalIntelCount = this.computeCriticalIntelCount(response.intelSignals);
+    const shouldForceTerminate = turnNumber >= 10 || criticalIntelCount >= 4;
+
+    if (response.shouldTerminate || !shouldForceTerminate) {
+      return response;
+    }
+
+    return {
+      ...response,
+      shouldTerminate: true,
+      terminationReason: response.terminationReason || `Deterministic stop: turn=${turnNumber}, criticalIntelSignals=${criticalIntelCount}`
+    };
+  }
+
   async generateResponse(scammerMessage, conversationHistory, nextIntent, stressScore) {
     const startTime = Date.now();
     console.log('⏱️ Agent.generateResponse started');
@@ -560,6 +777,10 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
       alreadyAsked.push('✗ consumer/electricity number');
       addedTopics.add('consumer');
     }
+    if (/\b(what (exact|specific)? ?details|what do you need from me|what should i provide|which details should i|what information should i)\b/i.test(allHoneypotQuestions) && !addedTopics.has('procedure')) {
+      alreadyAsked.push('✗ generic procedure/details');
+      addedTopics.add('procedure');
+    }
 
     // OTP tracking
     const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
@@ -573,7 +794,9 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
     // Looks for "account", "acc", "no", "number" within reasonable distance of digits
     const accountContextRegex = /(?:account|acc|acct|a\/c)[\s\w.:#-]{0,20}?(\d{9,18})/gi;
     const matches = [...scammerMessage.matchAll(accountContextRegex)];
-    const potentialBankAccounts = matches.map(m => m[1]); // Extract only the number part
+    const potentialBankAccounts = matches
+      .map(m => this.onlyDigits(m[1]))
+      .filter(acc => !this.isLikelyPhoneNumberDigits(acc)); // Skip likely phone numbers
 
     const bankAccountHint = potentialBankAccounts.length > 0
       ? `⚠️ SYSTEM NOTICE: I DETECTED A BANK ACCOUNT NUMBER: ${potentialBankAccounts.join(', ')} (based on 'account' keyword). ADD TO 'bankAccounts'! (Ignore if it's a phone number)`
@@ -600,6 +823,7 @@ ${actualQuestionsAsked.length > 0 ? actualQuestionsAsked.join('\n') : 'None yet'
 🚫 TOPICS ALREADY COVERED: ${alreadyAsked.join(', ') || 'None yet'}
 
 ⚠️ DO NOT ASK ABOUT THESE TOPICS AGAIN!
+${addedTopics.has('procedure') ? '\n🚫 HARD BAN: DO NOT ask generic "what details should I provide" again. Ask a specific field only.' : ''}
 
 🎭 EMOTION CONTROL (MANDATORY BEHAVIOR):
 ${turnNumber === 1 ? `1️⃣ INITIAL SHOCK: Respond with FEAR/ALARM. ("Oh god", "This is alarming", "I'm really worried")` : ''}
@@ -721,10 +945,20 @@ Generate JSON:`;
         terminationReason: agentResponse.terminationReason || ""
       };
 
+      finalResponse.intelSignals = this.sanitizeIntelSignals(finalResponse.intelSignals);
+      finalResponse.reply = this.enforceNonRepetitiveReply(
+        finalResponse.reply,
+        addedTopics,
+        scammerMessage,
+        conversationContext
+      );
+
+      const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
+
       const totalTime = Date.now() - startTime;
       console.log(`✅ Total response time: ${totalTime} ms`);
 
-      return finalResponse;
+      return finalizedResponse;
 
     } catch (error) {
       console.error('❌ Error in generateResponse:', error);
