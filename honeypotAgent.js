@@ -438,6 +438,80 @@ ${intentList}`;
     return normalized;
   }
 
+  formatIntelForNotes(intelSignals) {
+    const signals = intelSignals && typeof intelSignals === 'object' ? intelSignals : {};
+    const order = [
+      'scammerNames',
+      'orgNames',
+      'departmentNames',
+      'designations',
+      'employeeIds',
+      'supervisorNames',
+      'callbackNumbers',
+      'phoneNumbers',
+      'emailAddresses',
+      'phishingLinks',
+      'upiIds',
+      'bankAccounts',
+      'ifscCodes',
+      'branchNames',
+      'transactionIds',
+      'merchantNames',
+      'amounts',
+      'complaintIds',
+      'trackingIds',
+      'challanNumbers',
+      'vehicleNumbers',
+      'consumerNumbers',
+      'appNames',
+      'suspiciousKeywords'
+    ];
+
+    const parts = [];
+    for (const key of order) {
+      const raw = signals[key];
+      if (!Array.isArray(raw) || raw.length === 0) continue;
+
+      const items = raw.filter(Boolean).map(v => String(v).trim()).filter(Boolean);
+      if (items.length === 0) continue;
+
+      const maxItems = key === 'suspiciousKeywords' ? 12 : 6;
+      const shown = items.slice(0, maxItems);
+      const suffix = items.length > maxItems ? ` +${items.length - maxItems} more` : '';
+      parts.push(`${key}=[${shown.join(', ')}]${suffix}`);
+    }
+
+    return parts.join('; ');
+  }
+
+  fixupAgentNotes(agentNotes, intelSignals) {
+    const intelSummary = this.formatIntelForNotes(intelSignals);
+    const hasIntel = Boolean(intelSummary);
+
+    let notes = typeof agentNotes === 'string' ? agentNotes : '';
+    notes = notes.replace(/\s+/g, ' ').trim();
+
+    if (!notes) {
+      return hasIntel ? `Extracted intelligence: ${intelSummary}.` : '';
+    }
+
+    if (hasIntel) {
+      // Remove contradictory "none yet" claims if we actually extracted intel.
+      notes = notes.replace(/Extracted intelligence:\s*None yet\.?/ig, '').trim();
+      notes = notes.replace(/Extracted intelligence:\s*none\.?/ig, '').trim();
+      notes = notes.replace(/\bNone yet\b/ig, '');
+      notes = notes.replace(/\s+/g, ' ').trim();
+
+      if (!/Extracted intelligence:/i.test(notes)) {
+        notes = `${notes} Extracted intelligence: ${intelSummary}.`;
+      } else {
+        notes = notes.replace(/Extracted intelligence:\s*[^.]*\./i, `Extracted intelligence: ${intelSummary}.`);
+      }
+    }
+
+    return notes.replace(/\s+/g, ' ').trim();
+  }
+
   computeCriticalIntelCount(intelSignals) {
     if (!intelSignals || typeof intelSignals !== 'object') return 0;
     const fields = ['callbackNumbers', 'phoneNumbers', 'phishingLinks', 'upiIds', 'bankAccounts', 'employeeIds', 'emailAddresses', 'transactionIds'];
@@ -1065,6 +1139,7 @@ Generate JSON:`;
       );
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
+      finalizedResponse.agentNotes = this.fixupAgentNotes(finalizedResponse.agentNotes, finalizedResponse.intelSignals);
       const totalTime = Date.now() - startTime;
       console.log(`✅ Total response time: ${totalTime} ms`);
 
