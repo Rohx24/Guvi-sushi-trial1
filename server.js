@@ -13,7 +13,7 @@ const HoneypotAgent = require('./honeypotAgent');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || 'honeypot-guvi-2026-secure-key';
-const GUVI_CALLBACK_URL = 'https://guvi-honeypot-tester.onrender.com';
+const GUVI_CALLBACK_URL = 'https://hackathon.guvi.in/api/updateHoneyPotFinalResult';
 const CALLBACK_MAX_RETRIES = 3;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
