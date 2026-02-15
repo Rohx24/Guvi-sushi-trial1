@@ -25,6 +25,77 @@ class HoneypotAgent {
     return Math.max(1, Math.floor(parsed));
   }
 
+  detectScenario(scammerMessage, conversationContext) {
+    const text = `${scammerMessage || ''} ${conversationContext || ''}`.toLowerCase();
+
+    const score = (re) => (re.test(text) ? 1 : 0);
+
+    const scores = {
+      lottery: 0,
+      delivery: 0,
+      traffic: 0,
+      electricity: 0,
+      apk_remote: 0,
+      kyc: 0,
+      tax_refund: 0,
+      ecommerce: 0,
+      bank: 0
+    };
+
+    // Prize / lucky draw / rewards
+    scores.lottery += score(/\b(lucky draw|luckydraw|lottery|raffle|rewards?\b|reward\s+division|winner|won\b|selected\b|prize\b|jackpot|gift)\b/);
+    scores.lottery += score(/\b(processing fee|claim (?:your )?prize|claim (?:your )?reward)\b/);
+
+    // E-commerce / shopping / refund / courier impersonation (Amazon/Flipkart etc.)
+    scores.ecommerce += score(/\b(amazon|flipkart|myntra|ajio|meesho|snapdeal|nykaa|zepto|blinkit|swiggy|zomato)\b/);
+    scores.ecommerce += score(/\b(order id|order number|order no|invoice|shipment|delivery|refund|return|replacement|cancel(?:lation)?|customer care|support|delivery partner)\b/);
+
+    // Delivery / courier
+    scores.delivery += score(/\b(india post|courier|delivery|parcel|package|consignment|tracking|shipment|customs)\b/);
+    scores.delivery += score(/\b(address incomplete|delivery fee)\b/);
+
+    // Traffic challan
+    scores.traffic += score(/\b(challan|traffic|violation|rto|vehicle number|license)\b/);
+
+    // Electricity bill
+    scores.electricity += score(/\b(electricity|power|bill|disconnection|disconnect|meter|consumer number|ca number)\b/);
+
+    // APK / remote access
+    scores.apk_remote += score(/\b(anydesk|teamviewer|quicksupport|apk|install|download app|remote access)\b/);
+
+    // KYC / suspension
+    scores.kyc += score(/\b(kyc|aadhaar|aadhar|pan|account (?:suspend|suspended|blocked|freeze|frozen)|update kyc)\b/);
+
+    // Tax refund
+    scores.tax_refund += score(/\b(income tax|itr|refund|tds|assessment|e-filing)\b/);
+
+    // Bank / OTP / transactions
+    scores.bank += score(/\b(bank|account|otp|mpin|pin|password|cvv|ifsc|transaction|debit|credit|refund|upi|fraud|blocked)\b/);
+
+    let best = 'bank';
+    let bestScore = -1;
+    for (const [k, v] of Object.entries(scores)) {
+      if (v > bestScore) {
+        best = k;
+        bestScore = v;
+      }
+    }
+
+    // If nothing matched, default to "bank" behavior.
+    if (bestScore <= 0) return 'bank';
+    return best;
+  }
+
+  buildAskedTopicsFromHistory(conversationHistory) {
+    const asked = new Set();
+    for (const msg of conversationHistory || []) {
+      for (const t of this.extractQuestionTopics(msg.agentReply || '')) {
+        asked.add(t);
+      }
+    }
+    return asked;
+  }
+
   normalizeNextIntent(nextIntent) {
     const validIntents = new Set([
       'clarify_procedure',
@@ -168,13 +239,15 @@ ${intentList}`;
       { key: 'ifsc', regex: /\b(ifsc|ifsc code|branch code)\b/i },
       { key: 'empid', regex: /\b(employee id|emp id|staff id)\b/i },
       { key: 'callback', regex: /\b(callback|call back|callback number|contact number|phone number|mobile number)\b/i },
-      { key: 'address', regex: /\b(branch address|full address|address of|located at)\b/i },
+      { key: 'address', regex: /\b(branch address|office address|full address|address of|located at)\b/i },
       { key: 'supervisor', regex: /\b(supervisor|manager|senior)\b/i },
       { key: 'txnid', regex: /\b(transaction id|txn id)\b/i },
       { key: 'merchant', regex: /\b(merchant|vendor|shop|store)\b/i },
       { key: 'upi', regex: /\b(upi|upi id|upi handle)\b/i },
       { key: 'amount', regex: /\b(amount|how much|transaction amount|refund amount|prize money)\b/i },
       { key: 'caseid', regex: /\b(case id|reference id|reference number|case number|ref id)\b/i },
+      { key: 'orderid', regex: /\b(order id|order number|order no|invoice number|booking id)\b/i },
+      { key: 'platform', regex: /\b(amazon|flipkart|myntra|ajio|meesho|snapdeal|nykaa|platform|website|app name)\b/i },
       { key: 'dept', regex: /\b(department|which department|what department)\b/i },
       { key: 'name', regex: /\b(who are you|your name|what.*name)\b/i },
       { key: 'app', regex: /\b(app|application|software|download|install|apk|anydesk|teamviewer)\b/i },
@@ -183,6 +256,11 @@ ${intentList}`;
       { key: 'tracking', regex: /\b(tracking id|consignment number|package id)\b/i },
       { key: 'challan', regex: /\b(challan|violation number|vehicle number)\b/i },
       { key: 'consumer', regex: /\b(consumer number|electricity id|ca number)\b/i },
+      { key: 'lottery', regex: /\b(lucky draw|lottery|raffle|rewards program|reward\s+division|prize scheme)\b/i },
+      { key: 'entry', regex: /\b(entry number|ticket number|coupon code|draw id)\b/i },
+      { key: 'org', regex: /\b(company|organisation|organization|brand|official company name)\b/i },
+      { key: 'documents', regex: /\b(pan|aadhaar|aadhar|kyc|documents?)\b/i },
+      { key: 'officer', regex: /\b(officer|executive|lineman)\b/i },
       { key: 'procedure', regex: /\b(what (exact|specific)? ?details|what do you need from me|what should i provide|which details should i|what information should i)\b/i }
     ];
 
@@ -195,13 +273,16 @@ ${intentList}`;
     return topics;
   }
 
-  shouldUseTopicForMessage(topic, scammerMessage, conversationContext) {
+  shouldUseTopicForMessage(topic, scammerMessage, conversationContext, scenario = 'bank') {
     const contextText = `${scammerMessage || ''} ${conversationContext || ''}`;
+    const lc = contextText.toLowerCase();
 
     if (topic === 'upi') {
       return /\b(upi|payment|refund|transfer|collect|reversal)\b/i.test(contextText);
     }
     if (topic === 'link') {
+      // For lottery/kyc/delivery scams, asking for an "official website/link" is natural even if they didn't paste it yet.
+      if (scenario === 'lottery' || scenario === 'kyc' || scenario === 'delivery' || scenario === 'ecommerce') return true;
       return /\b(link|website|url|click|download|verify)\b/i.test(contextText);
     }
     if (topic === 'txnid' || topic === 'merchant' || topic === 'amount') {
@@ -210,11 +291,51 @@ ${intentList}`;
     if (topic === 'app') {
       return /\b(app|download|install|apk|anydesk|teamviewer)\b/i.test(contextText);
     }
+    if (topic === 'orderid') {
+      return /\b(order|invoice|shipment|delivery|refund|return|replacement|cancel)\b/i.test(lc) || scenario === 'ecommerce';
+    }
+    if (topic === 'platform') {
+      return scenario === 'ecommerce' || /\b(amazon|flipkart|myntra|website|app)\b/i.test(lc);
+    }
+    if (topic === 'caseid') {
+      // "Case ID" is natural for bank/complaint/govt flows, but not for lottery unless they themselves mention "claim/ref/ticket id".
+      if (scenario === 'lottery') return /\b(claim id|reference|ref|ticket|coupon|draw id)\b/i.test(lc);
+      return true;
+    }
+    if (topic === 'supervisor') {
+      // Asking "supervisor name" in prize scams sounds robotic; allow only if they mentioned it already.
+      if (scenario === 'lottery') return /\b(supervisor|manager|senior)\b/i.test(lc);
+      return true;
+    }
+    if (topic === 'ifsc') {
+      // IFSC/branch codes are only natural when the scam involves bank transfers/branch details (not typical prize/fee scams).
+      return /\b(ifsc|branch|neft|rtgs|imps|beneficiary|a\/c|account transfer|swift)\b/i.test(lc);
+    }
+    if (topic === 'address') {
+      // Address can be office address (lottery/dept) or branch address (bank). Gate branch-y address questions unless context implies it.
+      if (scenario === 'traffic') return false;
+      if (scenario === 'bank') return /\b(branch|bank|ifsc|neft|rtgs|imps)\b/i.test(lc);
+      if (scenario === 'delivery') return true;
+      if (scenario === 'ecommerce') return /\b(store|office|warehouse|pickup|return address|seller)\b/i.test(lc);
+      return true;
+    }
 
     return true;
   }
 
-  pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions = new Set()) {
+  getScenarioFallbackQuestion(scenario = 'bank') {
+    if (scenario === 'lottery') return 'Sir, which lucky draw is this and what is the prize amount exactly?';
+    if (scenario === 'delivery') return 'Sir, can you please share the tracking/consignment number once?';
+    if (scenario === 'electricity') return 'Sir, what is my consumer/CA number for this bill?';
+    if (scenario === 'traffic') return 'Sir, can you please share the challan number once?';
+    if (scenario === 'apk_remote') return 'Sir, which app exactly are you asking me to install?';
+    if (scenario === 'kyc') return 'Sir, which official website/link should I use to update KYC?';
+    if (scenario === 'tax_refund') return 'Sir, what is the exact refund amount and which portal is this from?';
+    if (scenario === 'ecommerce') return 'Sir, what is the order ID related to this issue?';
+    return 'Can you please share your case ID once so I can verify this properly?';
+  }
+
+  getTopicVariants(topic, scenario = 'bank') {
     const variantsByTopic = {
       callback: [
         'Can you please tell me your callback number for verification?',
@@ -236,6 +357,16 @@ ${intentList}`;
         'Sir, what is the reference number for this complaint?',
         'Can you please tell me the case number so I can note it?'
       ],
+      orderid: [
+        'Sir, what is the order ID/order number for this?',
+        'Can you please share the order number once so I can check properly?',
+        'Sir, can you tell me the invoice/booking ID for this issue?'
+      ],
+      platform: [
+        'Sir, which platform/app is this from exactly?',
+        'Can you please tell me if this is Amazon or Flipkart or which website?',
+        'Sir, what is the official website/app name for this?'
+      ],
       dept: [
         'Can you please tell me your exact department name?',
         'Sir, which department are you calling from?',
@@ -247,8 +378,8 @@ ${intentList}`;
         'Can you please share your name once for verification?'
       ],
       link: [
-        'Can you please share the exact secure link for verification?',
-        'Sir, can you send the verification website link once?',
+        'Can you please share the exact secure link/website for verification?',
+        'Sir, can you send the official website link once?',
         'Can you please tell me the exact URL to verify this?'
       ],
       txnid: [
@@ -276,15 +407,29 @@ ${intentList}`;
         'Sir, what is the branch IFSC code?',
         'Can you please share IFSC once for verification?'
       ],
-      address: [
-        'Can you please share your branch address for verification?',
-        'Sir, what is the branch address?',
-        'Can you please tell me where your branch is located?'
-      ],
+      address: scenario === 'bank'
+        ? [
+          'Can you please share your branch address for verification?',
+          'Sir, what is the branch address?',
+          'Can you please tell me where your branch is located?'
+        ]
+        : [
+          'Can you please share your office address for verification?',
+          'Sir, what is your office address?',
+          'Can you please tell me where your office is located?'
+        ],
       merchant: [
-        'Can you please tell me the merchant name for this transaction?',
-        'Sir, which merchant name is showing?',
-        'Can you please tell me the vendor/merchant details?'
+        ...(scenario === 'ecommerce'
+          ? [
+            'Sir, which seller/shop name is showing for this order?',
+            'Can you please tell me the merchant/seller name linked to this order?',
+            'Sir, is this refund from which merchant exactly?'
+          ]
+          : [
+            'Can you please tell me the merchant/organization name for this transaction?',
+            'Sir, which merchant name is showing?',
+            'Can you please tell me the vendor/merchant details?'
+          ])
       ],
       app: [
         'Can you please tell me which app exactly I should use?',
@@ -310,20 +455,98 @@ ${intentList}`;
         'Can you please tell me the exact fee amount and payment method?',
         'Sir, how much fee is there and how should I pay?',
         'Can you please tell me the payment amount and mode?'
+      ],
+      lottery: [
+        'Can you please tell me the exact lucky draw/lottery name for this prize?',
+        'Sir, what is the name of this rewards program?',
+        'Can you please tell me which lucky draw this prize is from?'
+      ],
+      entry: [
+        'Can you please tell me my entry/ticket number for this draw?',
+        'Sir, what is my coupon/entry number for this prize?',
+        'Can you please share the draw ID or ticket number linked to my prize?'
+      ],
+      org: [
+        'Can you please tell me the official company/organization name running this?',
+        'Sir, which company is this lucky draw under?',
+        'Can you please share the organization name once for verification?'
+      ],
+      documents: [
+        'Sir, which documents are you asking for in this process?',
+        'Can you please tell me if you need PAN or Aadhaar for this verification?',
+        'Sir, what documents exactly do you need from me?'
+      ],
+      officer: [
+        'Sir, what is the officer name handling this case?',
+        'Can you please tell me your designation/officer name for verification?',
+        'Sir, who is the responsible officer for this?'
       ]
     };
 
-    const priorityTopics = [
+    return variantsByTopic[topic] || [];
+  }
+
+  getScenarioPriorityTopics(scenario = 'bank') {
+    if (scenario === 'lottery') {
+      return [
+        // Human flow: who/which org, which draw, why me, then payment details if they push.
+        'callback', 'name', 'dept', 'org', 'lottery', 'entry', 'empid', 'email',
+        'amount', 'fee', 'upi', 'link', 'txnid', 'address'
+      ];
+    }
+    if (scenario === 'delivery') {
+      return [
+        'callback', 'tracking', 'link', 'fee', 'email', 'caseid', 'org', 'address',
+        'dept', 'name', 'empid'
+      ];
+    }
+    if (scenario === 'traffic') {
+      return [
+        'callback', 'challan', 'amount', 'link', 'caseid', 'dept', 'name', 'empid', 'email'
+      ];
+    }
+    if (scenario === 'electricity') {
+      return [
+        'callback', 'consumer', 'amount', 'officer', 'dept', 'empid', 'email', 'caseid', 'address'
+      ];
+    }
+    if (scenario === 'apk_remote') {
+      return [
+        'app', 'link', 'callback', 'empid', 'email', 'caseid', 'dept', 'name'
+      ];
+    }
+    if (scenario === 'kyc') {
+      return [
+        'link', 'callback', 'documents', 'empid', 'email', 'caseid', 'dept', 'name'
+      ];
+    }
+    if (scenario === 'tax_refund') {
+      return [
+        'link', 'callback', 'amount', 'caseid', 'email', 'dept', 'name', 'empid'
+      ];
+    }
+    if (scenario === 'ecommerce') {
+      return [
+        'platform', 'orderid', 'callback', 'email', 'merchant', 'amount', 'link', 'tracking',
+        'caseid', 'dept', 'name', 'empid'
+      ];
+    }
+    // Default to bank-ish.
+    return [
       'callback', 'empid', 'email', 'caseid', 'link', 'txnid', 'amount', 'upi',
       'supervisor', 'ifsc', 'address', 'merchant', 'dept', 'name', 'app', 'tracking', 'challan', 'consumer', 'fee'
     ];
+  }
+
+  pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions = new Set(), scenario = 'bank') {
+    const priorityTopics = this.getScenarioPriorityTopics(scenario);
 
     const normalizeQuestion = (q) => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
     for (const topic of priorityTopics) {
       if (askedTopics.has(topic)) continue;
-      if (!this.shouldUseTopicForMessage(topic, scammerMessage, conversationContext)) continue;
-      const variants = variantsByTopic[topic] || [];
+      if (!this.shouldUseTopicForMessage(topic, scammerMessage, conversationContext, scenario)) continue;
+      const variants = this.getTopicVariants(topic, scenario);
       for (const v of variants) {
         if (!recentQuestions.has(normalizeQuestion(v))) {
           return v;
@@ -333,7 +556,7 @@ ${intentList}`;
     }
 
     // Last resort should still avoid generic "what details do I provide" loops.
-    return 'Can you please share your case ID once so I can verify this properly?';
+    return this.getScenarioFallbackQuestion(scenario);
   }
 
   getRecentQuestionSet(conversationHistory, limit = 6) {
@@ -344,21 +567,34 @@ ${intentList}`;
     return new Set(questions);
   }
 
-  enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext, conversationHistory) {
+  enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext, conversationHistory, scenario = 'bank') {
     if (!reply || typeof reply !== 'string') {
       return "I'm a bit confused. Can you please share your employee ID for verification?";
     }
 
     const questionTopics = this.extractQuestionTopics(reply); // topics only from question text
+    const firstQuestion = (this.extractQuestionSentences(reply)[0] || '').toLowerCase();
     const repeatedQuestionTopicFound = [...questionTopics].some(topic => askedTopics.has(topic));
     const repeatedProcedure = questionTopics.has('procedure') && askedTopics.has('procedure');
+    const disallowedTopicFound = [...questionTopics].some(topic => !this.shouldUseTopicForMessage(topic, scammerMessage, conversationContext, scenario));
+    const bankyQuestionInNonBankScenario =
+      scenario !== 'bank' && /\b(ifsc|branch|neft|rtgs|imps|beneficiary|swift)\b/i.test(firstQuestion);
 
-    if (!repeatedQuestionTopicFound && !repeatedProcedure) {
+    // If the model forgot to ask a question, append a scenario-appropriate one.
+    if (questionTopics.size === 0) {
+      const recentQuestions = this.getRecentQuestionSet(conversationHistory);
+      const appendedQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions, scenario);
+      const trimmed = reply.trim();
+      const punctuated = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+      return `${punctuated} ${appendedQuestion}`;
+    }
+
+    if (!repeatedQuestionTopicFound && !repeatedProcedure && !disallowedTopicFound && !bankyQuestionInNonBankScenario) {
       return reply;
     }
 
     const recentQuestions = this.getRecentQuestionSet(conversationHistory);
-    const replacementQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions);
+    const replacementQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions, scenario);
 
     // Preserve the model's original tone as much as possible: keep everything before the first question, then swap in a new question.
     const qMatch = /[^.!?]*\?/.exec(reply);
@@ -1146,12 +1382,15 @@ Generate JSON:`;
       };
 
       finalResponse.intelSignals = this.sanitizeIntelSignals(finalResponse.intelSignals);
+      const scenario = this.detectScenario(scammerMessage, conversationContext);
+      const askedTopicsForEnforcement = this.buildAskedTopicsFromHistory(conversationHistory);
       finalResponse.reply = this.enforceNonRepetitiveReply(
         finalResponse.reply,
-        addedTopics,
+        askedTopicsForEnforcement,
         scammerMessage,
         conversationContext,
-        conversationHistory
+        conversationHistory,
+        scenario
       );
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
