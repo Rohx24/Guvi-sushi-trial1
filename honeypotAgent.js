@@ -13,6 +13,18 @@ class HoneypotAgent {
     console.log('���� FINAL Enhanced Honeypot Agent initialized');
   }
 
+  getHistoryWindow() {
+    // Defaults to last 5 turns (token efficient). Set `USE_FULL_HISTORY=true` to send full history.
+    if (String(process.env.USE_FULL_HISTORY || '').toLowerCase() === 'true') {
+      return 0;
+    }
+
+    const parsed = Number(process.env.HISTORY_WINDOW);
+    if (!Number.isFinite(parsed)) return 5;
+    if (parsed <= 0) return 0;
+    return Math.max(1, Math.floor(parsed));
+  }
+
   normalizeNextIntent(nextIntent) {
     const validIntents = new Set([
       'clarify_procedure',
@@ -540,7 +552,11 @@ ${intentList}`;
     console.log('⏱️ Agent.generateResponse started');
 
     // Build conversation context
-    const conversationContext = conversationHistory.slice(-5).map((msg, idx) =>
+    const historyWindow = this.getHistoryWindow();
+    const contextTurns = historyWindow === 0 ? conversationHistory : conversationHistory.slice(-historyWindow);
+    console.log('🧠 Context turns:', { total: conversationHistory.length, included: contextTurns.length, historyWindow });
+
+    const conversationContext = contextTurns.map((msg, idx) =>
       `Turn ${idx + 1}:\nScammer: ${msg.scammerMessage}\nYou: ${msg.agentReply || '(first message)'}`
     ).join('\n\n');
 
