@@ -58,7 +58,8 @@ class HoneypotAgent {
     scores.traffic += score(/\b(challan|traffic|violation|rto|vehicle number|license)\b/);
 
     // Electricity bill
-    scores.electricity += score(/\b(electricity|power|bill|disconnection|disconnect|meter|consumer number|ca number)\b/);
+    // NOTE: "disconnection" by itself is ambiguous (telecom scams use it too). Require electricity/power/bill/consumer context.
+    scores.electricity += score(/\b(electricity|power|electricity bill|power bill|meter|consumer number|ca number|power will be disconnected|disconnection of power)\b/);
 
     // APK / remote access
     scores.apk_remote += score(/\b(anydesk|teamviewer|quicksupport|apk|install|download app|remote access)\b/);
@@ -70,6 +71,7 @@ class HoneypotAgent {
     scores.tax_refund += score(/\b(income tax|itr|refund|tds|assessment|e-filing)\b/);
 
     // Bank / OTP / transactions
+    scores.bank += score(/\b(sbi|hdfc|icici|axis|kotak|pnb|bob|bank of baroda|state bank)\b/);
     scores.bank += score(/\b(bank|account|otp|mpin|pin|password|cvv|ifsc|transaction|debit|credit|refund|upi|fraud|blocked)\b/);
 
     let best = 'bank';
@@ -79,6 +81,11 @@ class HoneypotAgent {
         best = k;
         bestScore = v;
       }
+    }
+
+    // Tie-breakers: prefer "bank" when explicit bank names appear.
+    if (bestScore > 0 && scores.bank === bestScore) {
+      best = 'bank';
     }
 
     // If nothing matched, default to "bank" behavior.
@@ -173,10 +180,12 @@ class HoneypotAgent {
     const normalized = this.normalizePrefix(prefix).slice(0, 60);
 
     const startsTooDramatic = turnNumber > 2 && /\b(oh god|hai ram)\b/i.test(prefix);
+    const genericAlarm = /\bthis is alarming\b/i.test(prefix);
+    const scenarioAlarmRewrite = scenario !== 'bank' && genericAlarm;
     const repeats = normalized && recentPrefixes.includes(normalized);
     const worryLoop = /\b(really worried|get(ting)? (so )?worried)\b/i.test(prefix) && turnNumber > 2;
 
-    if (!startsTooDramatic && !repeats && !worryLoop) return reply;
+    if (!startsTooDramatic && !scenarioAlarmRewrite && !repeats && !worryLoop) return reply;
 
     const openers = {
       lottery: [
@@ -441,6 +450,18 @@ ${intentList}`;
       // "Case ID" is natural for bank/complaint/govt flows, but not for lottery unless they themselves mention "claim/ref/ticket id".
       if (scenario === 'lottery') return /\b(claim id|reference|ref|ticket|coupon|draw id)\b/i.test(lc);
       return true;
+    }
+    if (topic === 'consumer') {
+      return scenario === 'electricity' || /\b(consumer number|ca number)\b/i.test(lc);
+    }
+    if (topic === 'challan') {
+      return scenario === 'traffic' || /\b(challan|violation|traffic|e-?challan)\b/i.test(lc);
+    }
+    if (topic === 'tracking') {
+      return scenario === 'delivery' || /\b(tracking|consignment|parcel|package|courier)\b/i.test(lc);
+    }
+    if (topic === 'officer') {
+      return scenario === 'electricity' || scenario === 'traffic' || /\b(officer)\b/i.test(lc);
     }
     if (topic === 'supervisor') {
       // Asking "supervisor name" in prize scams sounds robotic; allow only if they mentioned it already.

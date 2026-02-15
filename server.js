@@ -79,6 +79,68 @@ const sessions = new Map();
 // Initialize agent
 const agent = new HoneypotAgent();
 
+const normalizeConversationHistoryToTurns = (conversationHistory) => {
+    const history = Array.isArray(conversationHistory) ? conversationHistory : [];
+    if (history.length === 0) return [];
+
+    // If already in turn format, preserve it.
+    const looksLikeTurnFormat = history.some(m => typeof m === 'object' && m && ('scammerMessage' in m || 'agentReply' in m));
+    if (looksLikeTurnFormat) {
+        return history
+            .map(m => ({
+                timestamp: m.timestamp,
+                scammerMessage: m.scammerMessage || '',
+                agentReply: m.agentReply || ''
+            }))
+            .filter(t => (t.scammerMessage || t.agentReply));
+    }
+
+    // Otherwise expect message-list format: [{sender,text,timestamp}, ...]
+    const turns = [];
+    let current = null;
+    for (const msg of history) {
+        const sender = msg?.sender;
+        const text = msg?.text ?? '';
+        const ts = msg?.timestamp;
+        if (!sender) continue;
+
+        if (sender === 'scammer') {
+            if (current && (current.scammerMessage || current.agentReply)) {
+                turns.push(current);
+            }
+            current = { timestamp: ts, scammerMessage: String(text || ''), agentReply: '' };
+            continue;
+        }
+
+        if (sender === 'user') {
+            if (!current) {
+                turns.push({ timestamp: ts, scammerMessage: '', agentReply: String(text || '') });
+                continue;
+            }
+            current.agentReply = String(text || '');
+            turns.push(current);
+            current = null;
+        }
+    }
+
+    if (current && (current.scammerMessage || current.agentReply)) {
+        turns.push(current);
+    }
+
+    return turns;
+};
+
+const buildTurnsFromSessionMessages = (sessionData) => {
+    const msgs = Array.isArray(sessionData?.messages) ? sessionData.messages : [];
+    return msgs
+        .map(m => ({
+            timestamp: m.timestamp,
+            scammerMessage: m.scammer || '',
+            agentReply: m.agent || ''
+        }))
+        .filter(t => (t.scammerMessage || t.agentReply));
+};
+
 // Health check endpoint
 app.get('/', (req, res) => {
     res.json({
@@ -141,13 +203,20 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
             }
         };
 
-        // Build conversation history for agent
-        const agentHistory = conversationHistory.map(msg => ({
-            timestamp: msg.timestamp,
-            scammerMessage: msg.sender === 'scammer' ? msg.text : '',
-            agentReply: msg.sender === 'user' ? msg.text : '',
-            stressScore: 5
-        }));
+        // Build conversation history for agent (TURN format), preferring server-side memory when available.
+        const historyFromReq = normalizeConversationHistoryToTurns(conversationHistory);
+        const historyFromSession = buildTurnsFromSessionMessages(sessionData);
+        const baseHistory = historyFromSession.length >= historyFromReq.length ? historyFromSession : historyFromReq;
+        const agentHistory = baseHistory.map(t => ({ ...t, stressScore: 5 }));
+
+        // If GUVI sent a longer history (e.g., server restart) backfill session memory so we don't repeat questions.
+        if ((sessionData.messages || []).length < baseHistory.length) {
+            sessionData.messages = baseHistory.map(t => ({
+                scammer: t.scammerMessage || '',
+                agent: t.agentReply || '',
+                timestamp: t.timestamp || new Date().toISOString()
+            }));
+        }
 
         // Calculate stress score based on conversation length and urgency
         const computedStressScore = Math.min(10, 5 + Math.floor(agentHistory.length / 2));
