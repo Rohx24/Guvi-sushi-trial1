@@ -978,6 +978,243 @@ ${intentList}`;
     return normalized;
   }
 
+  normalizeForExtraction(text) {
+    let t = String(text || '');
+    if (!t) return '';
+
+    // Normalize common "spaced URL/domain" patterns seen in eval data:
+    //   "http://echallan-pay. com/verify" -> "http://echallan-pay.com/verify"
+    //   "rewards@luckydrawdept. com" -> "rewards@luckydrawdept.com"
+    t = t.replace(/\b(https?)\s*:\s*\/\s*\//gi, '$1://');
+    t = t.replace(/\bwww\s*\.\s*/gi, 'www.');
+    t = t.replace(/(\b[a-z0-9-]{2,})\s*\.\s*([a-z]{2,10}\b)/gi, '$1.$2');
+    t = t.replace(/\s+/g, ' ');
+    return t;
+  }
+
+  extractIntelDeterministic(text) {
+    const t = this.normalizeForExtraction(text);
+    const tForContext = t
+      .replace(/\bhttps?:\/\/[^\s"'<>]+/gi, ' ')
+      .replace(/\bwww\.[^\s"'<>]+/gi, ' ')
+      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, ' ');
+
+    const intel = {
+      phoneNumbers: [],
+      callbackNumbers: [],
+      phishingLinks: [],
+      emailAddresses: [],
+      upiIds: [],
+      bankAccounts: [],
+      employeeIds: [],
+      complaintIds: [],
+      transactionIds: [],
+      challanNumbers: [],
+      vehicleNumbers: [],
+      amounts: [],
+      ifscCodes: [],
+      trackingIds: [],
+      consumerNumbers: []
+    };
+
+    const pushUnique = (arr, v) => {
+      const s = String(v || '').trim();
+      if (!s) return;
+      arr.push(s);
+    };
+
+    // Phone numbers (India): +91-xxxxxxxxxx, 91xxxxxxxxxx, xxxxxxxxxx (6-9 start)
+    const phoneMatches = [];
+    const rePhones = [
+      /\+?91[\s-]?[6-9]\d{9}\b/g,
+      /\b[6-9]\d{9}\b/g
+    ];
+    for (const re of rePhones) {
+      for (const m of t.match(re) || []) phoneMatches.push(m);
+    }
+    const formattedPhones = this.dedupeByKey(
+      phoneMatches
+        .map(v => this.formatPhoneNumber(v))
+        .filter(Boolean),
+      v => this.onlyDigits(v)
+    );
+    intel.phoneNumbers = formattedPhones;
+    intel.callbackNumbers = formattedPhones;
+
+    // Emails
+    const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+    for (const m of t.match(emailRegex) || []) {
+      pushUnique(intel.emailAddresses, m);
+    }
+
+    // UPI IDs: keep distinct from emails by requiring no dot in the domain part
+    const emailSet = new Set(intel.emailAddresses.map(e => e.toLowerCase()));
+    const upiRe = /\b[a-z0-9][a-z0-9._-]{1,48}@[a-z0-9]{2,20}\b/gi;
+    for (let m; (m = upiRe.exec(t)) !== null;) {
+      const raw = m[0];
+      const lower = raw.toLowerCase();
+      const parts = lower.split('@');
+      if (parts.length !== 2) continue;
+      const domain = parts[1];
+      if (domain.includes('.')) continue;
+      if (['com', 'in', 'org', 'net', 'gov', 'edu', 'co'].includes(domain)) continue;
+      if (emailSet.has(lower)) continue;
+
+      // Avoid matching a prefix of an email like "help@traffic" in "help@traffic-police.in"
+      const nextCh = t[m.index + raw.length] || '';
+      if (nextCh === '-' || nextCh === '.') continue;
+
+      pushUnique(intel.upiIds, raw);
+    }
+
+    // Links: full URLs, www., and plain domains with paths
+    const tNoEmails = t.replace(emailRegex, ' ');
+    const urlCandidates = [];
+    for (const m of t.match(/\bhttps?:\/\/[^\s"'<>]+/gi) || []) urlCandidates.push(m);
+    for (const m of tNoEmails.match(/\bwww\.[^\s"'<>]+/gi) || []) urlCandidates.push(m);
+    for (const m of tNoEmails.match(/\b(?:[a-z0-9][a-z0-9-]{0,61}\.)+[a-z]{2,10}\b(?:\/[^\s"'<>]*)?/gi) || []) urlCandidates.push(m);
+
+    const normalizedLinks = [];
+    for (const c of urlCandidates) {
+      if (String(c).includes('@')) continue; // skip emails
+      const normalized = this.normalizeLink(c);
+      if (!normalized) continue;
+      normalizedLinks.push(normalized);
+    }
+    // If we have a full URL, avoid also storing its scheme-stripped duplicate.
+    const schemeStrippedFromFull = new Set(
+      normalizedLinks
+        .filter(l => /^https?:\/\//i.test(l))
+        .map(l => l.replace(/^https?:\/\//i, '').replace(/^www\./i, '').toLowerCase())
+        .filter(Boolean)
+    );
+    for (const l of normalizedLinks) {
+      const stripped = l.replace(/^https?:\/\//i, '').replace(/^www\./i, '').toLowerCase();
+      if (!/^https?:\/\//i.test(l) && schemeStrippedFromFull.has(stripped)) continue;
+      pushUnique(intel.phishingLinks, l);
+    }
+
+    // Bank accounts: 9-18 digits only when near account keywords.
+    const accountContextRegex = /(?:account|acc|acct|a\s*\/\s*c|a\/c)\s*(?:no|number|#|:)?[\s\w.:#-]{0,20}?(\d{9,18})/gi;
+    for (const m of t.matchAll(accountContextRegex)) {
+      const digits = this.onlyDigits(m[1]);
+      if (!digits) continue;
+      if (this.isLikelyPhoneNumberDigits(digits)) continue;
+      pushUnique(intel.bankAccounts, digits);
+    }
+
+    // Employee IDs (context-gated)
+    const empIdRegex = /\b(?:employee|emp|staff|officer)\s*(?:id|ID)\s*(?:is|:|-)?\s*([A-Z0-9][A-Z0-9-]{2,20})\b/gi;
+    for (const m of t.matchAll(empIdRegex)) pushUnique(intel.employeeIds, m[1]);
+
+    // Complaint / reference IDs (context-gated)
+    const complaintIdRegex = /\b(?:case|complaint|reference|ref|crn)\s*(?:id|no|number)\s*(?:is|:|-)?\s*([A-Z0-9][A-Z0-9-]{2,24})\b/gi;
+    for (const m of t.matchAll(complaintIdRegex)) pushUnique(intel.complaintIds, m[1]);
+
+    // Transaction IDs (context-gated + common prefixes)
+    const txnIdRegex = /\b(?:txn|txnid|transaction)\s*(?:id|no|number|reference)?\s*(?:is|:|-)?\s*([A-Z0-9][A-Z0-9-]{3,30})\b/gi;
+    for (const m of t.matchAll(txnIdRegex)) pushUnique(intel.transactionIds, m[1]);
+    for (const m of t.match(/\bTXN[A-Z0-9]{4,}\b/gi) || []) pushUnique(intel.transactionIds, m);
+
+    // Challan numbers (context-gated + common formats)
+    const challanCtxRegex = /\b(?:challan|e-?challan|violation)\b(?:\s+(?:no|number|id)\b)?\s*(?:is|:)?\s*([A-Z0-9-]{3,24})\b/gi;
+    for (const m of tForContext.matchAll(challanCtxRegex)) pushUnique(intel.challanNumbers, m[1]);
+    if (/\bchallan\b/i.test(tForContext)) {
+      for (const m of t.match(/\b(?:TC|CHL|CHAL)\d{3,}\b/gi) || []) pushUnique(intel.challanNumbers, m);
+    }
+
+    // Vehicle numbers (India) + simple ABC1234 when explicitly referenced
+    for (const m of t.match(/\b[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{3,4}\b/g) || []) {
+      pushUnique(intel.vehicleNumbers, m.replace(/\s+/g, '').toUpperCase());
+    }
+    const vehicleCtxRegex = /\bvehicle(?:\s*number|\s*no|\s*no\.)?\s*(?:is|:|-)?\s*([A-Z]{3}\d{4})\b/gi;
+    for (const m of t.matchAll(vehicleCtxRegex)) pushUnique(intel.vehicleNumbers, m[1].toUpperCase());
+
+    // Amounts: require currency context (₹/Rs/INR)
+    const amountMatches = [];
+    for (const m of t.match(/₹\s*[\d,.]+/g) || []) amountMatches.push(m);
+    for (const m of t.match(/\b(?:rs\.?|inr|rupees)\s*[\d,.]+/gi) || []) amountMatches.push(m);
+    for (const m of amountMatches) {
+      const num = String(m).replace(/[^0-9.,]/g, '').replace(/,/g, '').trim();
+      if (!num) continue;
+      pushUnique(intel.amounts, `₹${num}`);
+    }
+
+    // IFSC codes: strict format + loose only if preceded by IFSC keyword
+    for (const m of t.match(/\b[A-Z]{4}0[A-Z0-9]{6}\b/g) || []) pushUnique(intel.ifscCodes, m.toUpperCase());
+    const ifscLooseRegex = /\bifsc(?:\s*code)?\s*(?:is|:|-)?\s*([A-Z0-9]{8,15})\b/gi;
+    for (const m of t.matchAll(ifscLooseRegex)) pushUnique(intel.ifscCodes, String(m[1]).toUpperCase());
+
+    // Tracking IDs
+    const trackingRegex = /\b(?:tracking|consignment|awb|waybill)\s*(?:id|no|number)?\s*(?:is|:|-)?\s*([A-Z0-9-]{5,30})\b/gi;
+    for (const m of t.matchAll(trackingRegex)) pushUnique(intel.trackingIds, m[1]);
+
+    // Consumer / CA numbers
+    const consumerRegex = /\b(?:consumer|ca|service)\s*(?:no|number|id)?\s*(?:is|:|-)?\s*([A-Z0-9]{4,24})\b/gi;
+    for (const m of t.matchAll(consumerRegex)) {
+      const v = String(m[1] || '').trim();
+      const digits = this.onlyDigits(v);
+      if (digits && this.isLikelyPhoneNumberDigits(digits)) continue;
+      pushUnique(intel.consumerNumbers, v);
+    }
+
+    return intel;
+  }
+
+  mergeIntelSignals(base, extra) {
+    const out = (base && typeof base === 'object') ? { ...base } : {};
+    const e = (extra && typeof extra === 'object') ? extra : {};
+
+    const asArray = (v) => (Array.isArray(v) ? v : []);
+    const mergeArray = (key, keyFn) => {
+      const merged = [...asArray(out[key]), ...asArray(e[key])].filter(Boolean).map(v => String(v).trim()).filter(Boolean);
+      out[key] = this.dedupeByKey(merged, keyFn);
+    };
+
+    // Phone numbers: dedupe by digits and mirror to both arrays.
+    mergeArray('phoneNumbers', v => this.onlyDigits(v));
+    mergeArray('callbackNumbers', v => this.onlyDigits(v));
+    const phoneUnion = this.dedupeByKey(
+      [...asArray(out.phoneNumbers), ...asArray(out.callbackNumbers)]
+        .map(v => this.formatPhoneNumber(v))
+        .filter(Boolean),
+      v => this.onlyDigits(v)
+    );
+    out.phoneNumbers = phoneUnion;
+    out.callbackNumbers = phoneUnion;
+
+    mergeArray('phishingLinks', v => (this.normalizeLink(v) || '').toLowerCase());
+    mergeArray('emailAddresses', v => String(v).toLowerCase());
+    mergeArray('upiIds', v => String(v).toLowerCase());
+    mergeArray('bankAccounts', v => this.onlyDigits(v));
+    mergeArray('employeeIds', v => String(v).toLowerCase());
+    mergeArray('complaintIds', v => String(v).toLowerCase());
+    mergeArray('transactionIds', v => String(v).toLowerCase());
+    mergeArray('challanNumbers', v => String(v).toLowerCase());
+    mergeArray('vehicleNumbers', v => String(v).toLowerCase());
+    mergeArray('amounts', v => String(v).replace(/\s+/g, '').toLowerCase());
+    mergeArray('ifscCodes', v => String(v).toLowerCase());
+    mergeArray('trackingIds', v => String(v).toLowerCase());
+    mergeArray('consumerNumbers', v => String(v).toLowerCase());
+
+    return out;
+  }
+
+  computeSessionIntelFromHistory(conversationHistory, currentScammerMessage, currentIntelSignals) {
+    let session = {};
+    const history = Array.isArray(conversationHistory) ? conversationHistory : [];
+
+    for (const turn of history) {
+      const deterministic = this.extractIntelDeterministic(turn?.scammerMessage || '');
+      session = this.mergeIntelSignals(session, deterministic);
+    }
+
+    const currentDeterministic = this.extractIntelDeterministic(currentScammerMessage || '');
+    session = this.mergeIntelSignals(session, currentDeterministic);
+    session = this.mergeIntelSignals(session, currentIntelSignals);
+    return session;
+  }
+
   formatIntelForNotes(intelSignals) {
     const signals = intelSignals && typeof intelSignals === 'object' ? intelSignals : {};
     const order = [
@@ -1635,7 +1872,13 @@ Generate JSON:`;
         terminationReason: agentResponse.terminationReason || ""
       };
 
-      finalResponse.intelSignals = this.sanitizeIntelSignals(finalResponse.intelSignals);
+      // Section B: Deterministic extraction + lossless merge (never overwrite, only union).
+      const deterministicIntel = this.extractIntelDeterministic(scammerMessage);
+      const mergedTurnIntel = this.mergeIntelSignals(finalResponse.intelSignals, deterministicIntel);
+      const sanitizedTurnIntel = this.sanitizeIntelSignals(mergedTurnIntel);
+      const sessionIntel = this.computeSessionIntelFromHistory(conversationHistory, scammerMessage, sanitizedTurnIntel);
+      finalResponse.intelSignals = this.sanitizeIntelSignals(sessionIntel);
+
       const askedTopicsForEnforcement = this.buildAskedTopicsFromHistory(conversationHistory);
       const askedUnion = new Set([...askedTopicsForEnforcement, ...addedTopics]);
       finalResponse.reply = this.enforceNonRepetitiveReply(
