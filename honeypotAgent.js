@@ -707,6 +707,19 @@ ${intentList}`;
     return new Set(questions);
   }
 
+  enforceSingleQuestion(reply) {
+    if (!reply || typeof reply !== 'string') return reply;
+    const questions = this.extractQuestionSentences(reply);
+    if (questions.length <= 1) return reply;
+
+    const first = questions[0];
+    const idx = reply.indexOf(first);
+    if (idx === -1) return reply;
+
+    const clipped = reply.slice(0, idx + first.length).replace(/\s+/g, ' ').trim();
+    return clipped || reply;
+  }
+
   enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext, conversationHistory, scenario = 'bank') {
     if (!reply || typeof reply !== 'string') {
       return "I'm a bit confused. Can you please share your employee ID for verification?";
@@ -714,6 +727,10 @@ ${intentList}`;
 
     const questionTopics = this.extractQuestionTopics(reply); // topics only from question text
     const firstQuestion = (this.extractQuestionSentences(reply)[0] || '').toLowerCase();
+    const recentQuestions = this.getRecentQuestionSet(conversationHistory);
+    const normalizeQuestion = (q) => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const repeatedExactQuestionFound = this.extractQuestionSentences(reply)
+      .some(q => recentQuestions.has(normalizeQuestion(q)));
     const repeatedQuestionTopicFound = [...questionTopics].some(topic => askedTopics.has(topic));
     const repeatedProcedure = questionTopics.has('procedure') && askedTopics.has('procedure');
     const disallowedTopicFound = [...questionTopics].some(topic => !this.shouldUseTopicForMessage(topic, scammerMessage, conversationContext, scenario));
@@ -722,18 +739,16 @@ ${intentList}`;
 
     // If the model forgot to ask a question, append a scenario-appropriate one.
     if (questionTopics.size === 0) {
-      const recentQuestions = this.getRecentQuestionSet(conversationHistory);
       const appendedQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions, scenario);
       const trimmed = reply.trim();
       const punctuated = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
       return `${punctuated} ${appendedQuestion}`;
     }
 
-    if (!repeatedQuestionTopicFound && !repeatedProcedure && !disallowedTopicFound && !bankyQuestionInNonBankScenario) {
+    if (!repeatedExactQuestionFound && !repeatedQuestionTopicFound && !repeatedProcedure && !disallowedTopicFound && !bankyQuestionInNonBankScenario) {
       return reply;
     }
 
-    const recentQuestions = this.getRecentQuestionSet(conversationHistory);
     const replacementQuestion = this.pickNonRepeatingQuestion(askedTopics, scammerMessage, conversationContext, recentQuestions, scenario);
 
     // Preserve the model's original tone as much as possible: keep everything before the first question, then swap in a new question.
@@ -1537,9 +1552,10 @@ Generate JSON:`;
 
       finalResponse.intelSignals = this.sanitizeIntelSignals(finalResponse.intelSignals);
       const askedTopicsForEnforcement = this.buildAskedTopicsFromHistory(conversationHistory);
+      const askedUnion = new Set([...askedTopicsForEnforcement, ...addedTopics]);
       finalResponse.reply = this.enforceNonRepetitiveReply(
         finalResponse.reply,
-        askedTopicsForEnforcement,
+        askedUnion,
         scammerMessage,
         conversationContext,
         conversationHistory,
@@ -1551,6 +1567,7 @@ Generate JSON:`;
         turnNumber,
         conversationHistory
       );
+      finalResponse.reply = this.enforceSingleQuestion(finalResponse.reply);
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
       finalizedResponse.agentNotes = this.fixupAgentNotes(finalizedResponse.agentNotes, finalizedResponse.intelSignals);
