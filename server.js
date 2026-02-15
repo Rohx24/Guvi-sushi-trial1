@@ -57,6 +57,25 @@ const ensureIntelSchema = (intel) => {
     return out;
 };
 
+// ---------------------------
+// Section A: Strict per-turn response contract
+// Must return EXACTLY: { status: "success", reply: "<string>" }
+// ---------------------------
+const toStrictTurnPayload = (payload) => ({
+    status: 'success',
+    reply: String(payload?.reply ?? '')
+});
+
+const assertStrictTurnPayload = (payload) => {
+    const strict = toStrictTurnPayload(payload);
+    const keys = Object.keys(payload && typeof payload === 'object' ? payload : {});
+    const extraKeys = keys.filter(k => k !== 'status' && k !== 'reply');
+    if (extraKeys.length > 0) {
+        console.warn('⚠️ Turn payload contained extra keys; stripping:', extraKeys);
+    }
+    return strict;
+};
+
 const normalizeForExtraction = (text) => {
     let t = String(text || '');
     if (!t) return '';
@@ -607,7 +626,7 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
         }
 
         // Return strict per-turn output contract
-        const turnPayload = agent.mapTurnResponse(response);
+        const turnPayload = assertStrictTurnPayload(agent.mapTurnResponse(response));
         console.log('📤 Sending response to GUVI:', turnPayload);
         res.json(turnPayload);
         console.log('✅ Response sent successfully!');
@@ -617,10 +636,10 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
         console.error('❌ Error message:', error.message);
         console.error('❌ Error stack:', error.stack);
         // Strict output contract: always return {status, reply} for the conversation endpoint.
-        res.json({
+        res.json(assertStrictTurnPayload({
             status: 'success',
             reply: "I'm a bit confused. Can you provide more information?"
-        });
+        }));
     }
 });
 
