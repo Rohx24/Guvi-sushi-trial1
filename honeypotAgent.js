@@ -96,6 +96,146 @@ class HoneypotAgent {
     return asked;
   }
 
+  shouldAllowTechnicalDelay(scammerMessage, conversationContext, scenario) {
+    const text = `${scammerMessage || ''} ${conversationContext || ''}`.toLowerCase();
+    const hasOtpLike = /\b(otp|pin|mpin|password|cvv)\b/i.test(text) || /(?:share|provide|tell).{0,10}(?:code|number)/i.test(text);
+    const hasLinkOrInstall = /\b(link|url|website|click|download|install|apk|anydesk|teamviewer|quicksupport|app)\b/i.test(text);
+    const hasPaymentStep = /\b(upi|payment|pay|fee|transfer|collect|refund)\b/i.test(text);
+
+    // If scam is purely "prize winner" with no concrete step yet, technical-delay excuses sound robotic.
+    if (scenario === 'lottery') {
+      return hasLinkOrInstall || hasPaymentStep;
+    }
+
+    return hasOtpLike || hasLinkOrInstall || hasPaymentStep;
+  }
+
+  adaptNextIntent(intent, scenario, scammerMessage, conversationContext) {
+    if (intent !== 'pretend_technical_issue') return intent;
+    if (this.shouldAllowTechnicalDelay(scammerMessage, conversationContext, scenario)) return intent;
+    // Avoid unnatural "phone not working / not receiving OTP" when scammer didn't ask for OTP/app/link.
+    return 'maintain_conversation';
+  }
+
+  buildScenarioControlPrompt(scenario, turnNumber, scammerMessage, conversationContext) {
+    const common = [
+      `Scenario: ${scenario}`,
+      `Turn: ${turnNumber}`,
+      `Style rules: Do NOT use the same opening phrase as previous turns. Avoid starting with "Oh god" after turn 2. Avoid repeating "I'm really worried" every turn.`,
+      `Content rules: Do NOT mention OTP/SMS/verification message unless scammer explicitly asked for OTP/PIN/password or said an SMS is sent. Keep 1-2 sentences and ask exactly ONE question.`
+    ];
+
+    const byScenario = {
+      lottery: `Lottery/prize tone: sound surprised + skeptical (not bank-like). Ask about lottery/draw name, why selected, ticket/entry number, prize amount, processing fee/payment mode, official website/email/contact.`,
+      ecommerce: `Shopping/refund tone: talk like an order/refund issue (not bank). Ask about platform (Amazon/Flipkart), order ID, refund/return amount, seller/merchant, tracking ID/link.`,
+      delivery: `Delivery tone: talk like parcel/courier (not bank). Ask tracking/consignment number, delivery office/company, fee amount, official link/contact.`,
+      traffic: `Traffic challan tone: ask challan number, vehicle number, official portal link, amount/date/location.`,
+      electricity: `Electricity tone: ask consumer/CA number, amount due, board name, officer name/designation, due date.`,
+      apk_remote: `Remote access/app tone: ask app name, download source/link, why needed, any ID/code shown in app.`,
+      kyc: `KYC tone: ask official website link, which documents requested (PAN/Aadhaar), department/callback.`,
+      tax_refund: `Tax refund tone: ask refund amount, portal/link, acknowledgement/reference number, callback.`,
+      bank: `Bank tone: ask employee ID/callback; ask transaction details only if they mentioned transaction/payment.`
+    };
+
+    return `${common.join('\n')}\n${byScenario[scenario] || byScenario.bank}`;
+  }
+
+  normalizePrefix(text) {
+    return String(text || '').toLowerCase().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '').trim();
+  }
+
+  getRecentPrefixes(conversationHistory, limit = 3) {
+    const recent = (conversationHistory || []).slice(-limit);
+    const prefixes = [];
+    for (const msg of recent) {
+      const reply = msg.agentReply || '';
+      const qMatch = /[^.!?]*\?/.exec(reply);
+      const prefix = (qMatch ? reply.slice(0, qMatch.index) : reply).trim();
+      if (!prefix) continue;
+      prefixes.push(this.normalizePrefix(prefix).slice(0, 60));
+    }
+    return prefixes;
+  }
+
+  enforceScenarioVoicePrefix(reply, scenario, turnNumber, conversationHistory) {
+    if (!reply || typeof reply !== 'string') return reply;
+
+    const qMatch = /[^.!?]*\?/.exec(reply);
+    const question = qMatch ? qMatch[0].trim() : '';
+    const prefix = qMatch ? reply.slice(0, qMatch.index).trim() : reply.trim();
+    const prefixSentences = prefix
+      .split(/[.!?]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    const tail = prefixSentences.slice(1).join('. ');
+
+    const recentPrefixes = this.getRecentPrefixes(conversationHistory);
+    const normalized = this.normalizePrefix(prefix).slice(0, 60);
+
+    const startsTooDramatic = turnNumber > 2 && /\b(oh god|hai ram)\b/i.test(prefix);
+    const repeats = normalized && recentPrefixes.includes(normalized);
+    const worryLoop = /\b(really worried|get(ting)? (so )?worried)\b/i.test(prefix) && turnNumber > 2;
+
+    if (!startsTooDramatic && !repeats && !worryLoop) return reply;
+
+    const openers = {
+      lottery: [
+        "Sir, I'm not understanding this prize thing properly",
+        "Arre, lucky winner? I'm surprised only",
+        "Sir, this is very unexpected for me"
+      ],
+      ecommerce: [
+        "Sir, this sounds like some order/refund issue only",
+        "Sir, I'm not understanding this order message",
+        "Sir, this is regarding which order exactly"
+      ],
+      delivery: [
+        "Sir, this is about my parcel or what",
+        "Sir, I'm not understanding this delivery issue",
+        "Sir, my package is held is it"
+      ],
+      traffic: [
+        "Sir, challan? I'm not understanding this properly",
+        "Sir, which violation is this about",
+        "Sir, I didn't see any challan message earlier"
+      ],
+      electricity: [
+        "Sir, power will be disconnected? I'm getting confused",
+        "Sir, this electricity bill issue I'm not understanding",
+        "Sir, which connection is this for"
+      ],
+      apk_remote: [
+        "Sir, you are saying install some app?",
+        "Sir, why should I give remote access like this",
+        "Sir, I'm not comfortable installing unknown app"
+      ],
+      kyc: [
+        "Sir, KYC update like this is very sudden",
+        "Sir, I'm not understanding this KYC message",
+        "Sir, which portal should I use for KYC"
+      ],
+      tax_refund: [
+        "Sir, refund? I'm not understanding this properly",
+        "Sir, which refund amount is this about",
+        "Sir, from which portal you are saying refund"
+      ],
+      bank: [
+        "Sir, I'm not understanding this properly",
+        "Sir, one minute, let me check once",
+        "Sir, please tell me clearly"
+      ]
+    };
+
+    const candidates = openers[scenario] || openers.bank;
+    const pick = candidates.find(c => !recentPrefixes.includes(this.normalizePrefix(c).slice(0, 60))) || candidates[0];
+    const punctuated = /[.!?]$/.test(pick) ? pick : `${pick}.`;
+    const joined = tail ? `${punctuated} ${tail}.` : punctuated;
+
+    // Keep the model's question as-is to preserve extraction logic.
+    if (question) return `${joined} ${question}`.replace(/\s+/g, ' ').trim();
+    return joined.replace(/\s+/g, ' ').trim();
+  }
+
   normalizeNextIntent(nextIntent) {
     const validIntents = new Set([
       'clarify_procedure',
@@ -798,7 +938,13 @@ ${intentList}`;
 
     const totalMessages = conversationHistory.length;
     const turnNumber = totalMessages + 1;
-    const normalizedNextIntent = this.normalizeNextIntent(nextIntent);
+    const scenario = this.detectScenario(scammerMessage, conversationContext);
+    const normalizedNextIntent = this.adaptNextIntent(
+      this.normalizeNextIntent(nextIntent),
+      scenario,
+      scammerMessage,
+      conversationContext
+    );
     const normalizedStressScore = this.normalizeStressScore(stressScore);
     const expectedPhase = this.deriveExpectedPhase(normalizedNextIntent, normalizedStressScore, turnNumber);
 
@@ -1336,13 +1482,20 @@ Generate JSON:`;
       normalizedStressScore,
       turnNumber
     );
+    const scenarioControlPrompt = this.buildScenarioControlPrompt(
+      scenario,
+      turnNumber,
+      scammerMessage,
+      conversationContext
+    );
 
     try {
       console.log('⏱️ Calling OpenAI...');
       console.log('🧭 Control inputs:', {
         nextIntent: normalizedNextIntent,
         stressScore: normalizedStressScore,
-        expectedPhase
+        expectedPhase,
+        scenario
       });
 
       const completion = await this.openai.chat.completions.create({
@@ -1350,6 +1503,7 @@ Generate JSON:`;
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'system', content: intentStressControlPrompt },
+          { role: 'system', content: scenarioControlPrompt },
           { role: 'user', content: userPrompt },
           { role: 'user', content: `Apply runtime control strictly for this turn. Intent=${normalizedNextIntent}, StressScore=${normalizedStressScore}, ExpectedPhase=${expectedPhase}.` }
         ],
@@ -1382,7 +1536,6 @@ Generate JSON:`;
       };
 
       finalResponse.intelSignals = this.sanitizeIntelSignals(finalResponse.intelSignals);
-      const scenario = this.detectScenario(scammerMessage, conversationContext);
       const askedTopicsForEnforcement = this.buildAskedTopicsFromHistory(conversationHistory);
       finalResponse.reply = this.enforceNonRepetitiveReply(
         finalResponse.reply,
@@ -1391,6 +1544,12 @@ Generate JSON:`;
         conversationContext,
         conversationHistory,
         scenario
+      );
+      finalResponse.reply = this.enforceScenarioVoicePrefix(
+        finalResponse.reply,
+        scenario,
+        turnNumber,
+        conversationHistory
       );
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
