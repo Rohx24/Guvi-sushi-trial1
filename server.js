@@ -190,7 +190,9 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
         // Get or create session data
         let sessionData = sessions.get(sessionId) || {
             sessionId,
+            sessionStartTs: Date.now(),
             messages: [],
+            finalOutput: null,
             scamDetected: false,
             intelligence: {
                 bankAccounts: [],
@@ -276,17 +278,23 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
 
             // Send final result to GUVI callback
             try {
-                const finalPayload = {
-                    sessionId: sessionId,
-                    scamDetected: sessionData.scamDetected,
-                    totalMessagesExchanged: sessionData.messages.length,
-                    extractedIntelligence: sessionData.intelligence,
-                    agentNotes: response.agentNotes || 'Conversation completed'
-                };
+                const finalOutput = agent.mapFinalOutput(
+                    {
+                        ...response,
+                        scamDetected: sessionData.scamDetected,
+                        intelSignals: sessionData.intelligence
+                    },
+                    conversationHistory,
+                    sessionData.sessionStartTs,
+                    Date.now()
+                );
 
-                console.log('📤 Sending to GUVI:', JSON.stringify(finalPayload, null, 2));
+                sessionData.finalOutput = finalOutput;
+                sessions.set(sessionId, sessionData);
 
-                await sendFinalResultToGuvi(finalPayload);
+                console.log('📤 Sending to GUVI:', JSON.stringify(finalOutput, null, 2));
+
+                await sendFinalResultToGuvi(finalOutput);
             } catch (callbackError) {
                 console.error('❌ Failed to send callback to GUVI:', callbackError.message);
                 // Don't fail the main response if callback fails
@@ -296,21 +304,20 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
             setTimeout(() => sessions.delete(sessionId), 60000);
         }
 
-        // Return GUVI expected format (Strict Spec Compliance)
-        console.log('📤 Sending response to GUVI:', { status: 'success', reply: response.reply });
-        res.json({
-            status: 'success',
-            reply: response.reply
-        });
+        // Return strict per-turn output contract
+        const turnPayload = agent.mapTurnResponse(response);
+        console.log('📤 Sending response to GUVI:', turnPayload);
+        res.json(turnPayload);
         console.log('✅ Response sent successfully!');
 
     } catch (error) {
         console.error('❌ ERROR in conversation handler:', error);
         console.error('❌ Error message:', error.message);
         console.error('❌ Error stack:', error.stack);
-        res.status(500).json({
-            status: 'error',
-            message: 'Failed to process conversation request'
+        // Strict output contract: always return {status, reply} for the conversation endpoint.
+        res.json({
+            status: 'success',
+            reply: "I'm a bit confused. Can you provide more information?"
         });
     }
 });
@@ -330,6 +337,24 @@ app.get('/api/session/:sessionId', authenticateApiKey, (req, res) => {
     }
 
     res.json(sessionData);
+});
+
+/**
+ * Get final output (strict schema) for a session.
+ */
+app.get('/api/final/:sessionId', authenticateApiKey, (req, res) => {
+    const { sessionId } = req.params;
+    const sessionData = sessions.get(sessionId);
+    const finalOutput = sessionData?.finalOutput;
+
+    if (!finalOutput) {
+        return res.status(404).json({
+            error: 'Not Found',
+            message: 'Final output not found'
+        });
+    }
+
+    res.json(finalOutput);
 });
 
 // Global error handler

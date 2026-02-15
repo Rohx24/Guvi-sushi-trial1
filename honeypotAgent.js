@@ -14,6 +14,38 @@ class HoneypotAgent {
     console.log('���� FINAL Enhanced Honeypot Agent initialized');
   }
 
+  mapTurnResponse(agentResult) {
+    return {
+      status: 'success',
+      reply: String(agentResult?.reply || '')
+    };
+  }
+
+  mapFinalOutput(agentResult, conversationHistory, sessionStartTs, sessionEndTs) {
+    const start = Number(sessionStartTs);
+    const end = Number(sessionEndTs);
+    const safeStart = Number.isFinite(start) ? start : Date.now();
+    const safeEnd = Number.isFinite(end) ? end : Date.now();
+
+    const durationSeconds = Math.max(0, (safeEnd - safeStart) / 1000);
+    const totalMessagesExchanged = (Array.isArray(conversationHistory) ? conversationHistory.length : 0) + 1;
+
+    const extractedIntelligence = (agentResult?.intelSignals && typeof agentResult.intelSignals === 'object')
+      ? agentResult.intelSignals
+      : {};
+
+    return {
+      status: 'completed',
+      scamDetected: Boolean(agentResult?.scamDetected),
+      extractedIntelligence,
+      engagementMetrics: {
+        engagementDurationSeconds: durationSeconds,
+        totalMessagesExchanged
+      },
+      agentNotes: String(agentResult?.agentNotes || '')
+    };
+  }
+
   getHistoryWindow() {
     // Defaults to last 5 turns (token efficient). Set `USE_FULL_HISTORY=true` to send full history.
     if (String(process.env.USE_FULL_HISTORY || '').toLowerCase() === 'true') {
