@@ -4,6 +4,7 @@
  */
 
 const { OpenAI } = require('openai');
+const { extractFirstJsonValue, stripCodeFences } = require('./llmJson');
 
 class HoneypotAgent {
   constructor() {
@@ -377,7 +378,52 @@ ${intentList}`;
 
   extractQuestionSentences(text) {
     if (!text || typeof text !== 'string') return [];
-    return text.match(/[^.!?]*\?/g) || [];
+
+    const raw = String(text);
+    const out = [];
+    const seen = new Set();
+
+    const pushDedup = (value) => {
+      const v = String(value || '').replace(/\s+/g, ' ').trim();
+      if (!v) return;
+      const key = v.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(v);
+    };
+
+    // 1) Explicit question-mark sentences.
+    const explicit = raw.match(/[^.!?]*\?/g) || [];
+    for (const q of explicit) pushDedup(q);
+
+    // 2) Imperative "question-like" lines without '?'.
+    // This catches: "Kindly provide ...", "Please tell me ...", "Can you share ...", etc.
+    const isImperativeStart = (s) => {
+      const t = String(s || '')
+        .trim()
+        .replace(/^(ok(ay)?|fine|alright)[, ]+/i, '')
+        .replace(/^sir[, ]+/i, '')
+        .trim();
+
+      return /^(?:please|kindly)\s+(?:tell|share|provide|send|confirm|give)\b/i.test(t) ||
+        /^(?:can|could|would|will)\s+you\b/i.test(t) ||
+        /^(?:tell|share|provide|send)\s+(?:me|your|the)\b/i.test(t) ||
+        /^(?:what|which|who|where|when|how)\b/i.test(t);
+    };
+
+    const chunks = raw
+      .split(/\n+/)
+      .flatMap(line => line.split(/(?<=[.!?])\s+/))
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    for (const c of chunks) {
+      if (c.includes('?')) continue;
+      if (!isImperativeStart(c)) continue;
+      pushDedup(`${c.replace(/[.!]+$/g, '').trim()}?`);
+    }
+
+    return out;
   }
 
   extractTopicsFromQuestionText(questionText) {
@@ -730,15 +776,53 @@ ${intentList}`;
 
   enforceSingleQuestion(reply) {
     if (!reply || typeof reply !== 'string') return reply;
-    const questions = this.extractQuestionSentences(reply);
-    if (questions.length <= 1) return reply;
+    const questionLikes = this.extractQuestionSentences(reply);
+    if (questionLikes.length <= 1) return reply;
 
-    const first = questions[0];
-    const idx = reply.indexOf(first);
-    if (idx === -1) return reply;
+    // If we have real '?' punctuation, hard-clip after the first one.
+    const firstQ = reply.indexOf('?');
+    if (firstQ !== -1) {
+      const secondQ = reply.indexOf('?', firstQ + 1);
+      if (secondQ === -1) return reply;
+      const clipped = reply.slice(0, firstQ + 1).replace(/\s+/g, ' ').trim();
+      return clipped || reply;
+    }
 
-    const clipped = reply.slice(0, idx + first.length).replace(/\s+/g, ' ').trim();
-    return clipped || reply;
+    // Otherwise, we likely have multiple imperative asks without '?'. Keep only the first sentence.
+    const m = reply.match(/^[\s\S]*?[.!?\n]/);
+    if (!m) return reply;
+    const clipped = String(m[0]).replace(/\s+/g, ' ').trim();
+    return this.ensureHasQuestionMark(clipped) || reply;
+  }
+
+  enforceMaxSentences(reply, maxSentences = 2) {
+    if (!reply || typeof reply !== 'string') return reply;
+    const parts = (reply.match(/[^.!?]+[.!?]?/g) || [reply])
+      .map(s => s.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+
+    if (parts.length <= maxSentences) return reply;
+
+    const qIdx = parts.findIndex(p => p.includes('?'));
+    if (qIdx === -1) {
+      return parts.slice(0, Math.max(1, maxSentences)).join(' ').trim() || reply;
+    }
+
+    // Keep the question sentence plus (at most) one adjacent sentence for context.
+    if (maxSentences <= 1) return parts[qIdx].trim() || reply;
+
+    const start = qIdx === 0 ? 0 : qIdx - 1;
+    const window = parts.slice(start, start + maxSentences).join(' ').trim();
+    return window || reply;
+  }
+
+  ensureHasQuestionMark(reply) {
+    if (!reply || typeof reply !== 'string') return reply;
+    if (reply.includes('?')) return reply;
+    const trimmed = reply.trim();
+    if (!trimmed) return reply;
+    if (/[.!]$/.test(trimmed)) return trimmed.replace(/[.!]+$/, '?');
+    return `${trimmed}?`;
   }
 
   enforceNonRepetitiveReply(reply, askedTopics, scammerMessage, conversationContext, conversationHistory, scenario = 'bank') {
@@ -1304,108 +1388,53 @@ NEVER LEAVE THESE EMPTY IF PRESENT IN TEXT!
 - If extracted info shows DIFFERENT organizations (e.g. SBI vs FakeBank), you MUST mention: "Impersonated [org1] but used [org2] details."
 - If UPI domain (@...) doesn't match claimed Bank (SBI vs @paytm), write "identity/UPI mismatch".`;
 
-    // BULLETPROOF MEMORY: Extract ACTUAL questions asked
-    const allHoneypotQuestions = conversationHistory
+    // Unified memory: extract topics + question-like lines (including imperative asks without '?')
+    const allHoneypotText = conversationHistory
       .map(msg => msg.agentReply || '')
       .join('\n');
 
-    // Extract actual question sentences
     const actualQuestionsAsked = [];
     conversationHistory.forEach((msg, idx) => {
-      if (msg.agentReply) {
-        const questions = msg.agentReply.match(/[^.!?]*\?/g) || [];
-        questions.forEach(q => {
-          actualQuestionsAsked.push(`Turn ${idx + 1
-            }: "${q.trim()}"`);
-        });
+      for (const q of this.extractQuestionSentences(msg.agentReply || '')) {
+        actualQuestionsAsked.push(`Turn ${idx + 1}: "${q.trim()}"`);
       }
     });
 
-    // Topic tracking with Set
+    const addedTopics = this.buildAskedTopicsFromHistory(conversationHistory);
     const alreadyAsked = [];
-    const addedTopics = new Set();
+    const topicLabels = [
+      ['email', '✗ email'],
+      ['ifsc', '✗ IFSC'],
+      ['empid', '✗ employee ID'],
+      ['callback', '✗ callback'],
+      ['address', '✗ address'],
+      ['supervisor', '✗ supervisor'],
+      ['txnid', '✗ transaction ID'],
+      ['merchant', '✗ merchant'],
+      ['upi', '✗ UPI'],
+      ['amount', '✗ amount'],
+      ['caseid', '✗ case/reference ID'],
+      ['dept', '✗ department'],
+      ['name', '✗ name'],
+      ['app', '✗ app/software'],
+      ['link', '✗ link/website'],
+      ['fee', '✗ fee/payment'],
+      ['tracking', '✗ tracking ID'],
+      ['challan', '✗ challan details'],
+      ['consumer', '✗ consumer/CA number'],
+      ['orderid', '✗ order ID'],
+      ['platform', '✗ platform/app'],
+      ['procedure', '✗ generic procedure/details']
+    ];
 
-    // Check each question type with word boundaries for exact matching
-    if (/\b(email|e-mail|email address)\b/i.test(allHoneypotQuestions) && !addedTopics.has('email')) {
-      alreadyAsked.push('✗ email');
-      addedTopics.add('email');
-    }
-    if (/\b(ifsc|ifsc code|branch code)\b/i.test(allHoneypotQuestions) && !addedTopics.has('ifsc')) {
-      alreadyAsked.push('✗ IFSC');
-      addedTopics.add('ifsc');
-    }
-    if (/\b(employee id|emp id|employee ID|staff id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('empid')) {
-      alreadyAsked.push('✗ employee ID');
-      addedTopics.add('empid');
-    }
-    if (/\b(callback|call back|callback number|contact number|phone number|mobile number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('callback')) {
-      alreadyAsked.push('✗ callback');
-      addedTopics.add('callback');
-    }
-    if (/\b(branch address|full address|address of|located at)\b/i.test(allHoneypotQuestions) && !addedTopics.has('address')) {
-      alreadyAsked.push('✗ address');
-      addedTopics.add('address');
-    }
-    if (/\b(supervisor|manager|senior|supervisor.*name)\b/i.test(allHoneypotQuestions) && !addedTopics.has('supervisor')) {
-      alreadyAsked.push('✗ supervisor');
-      addedTopics.add('supervisor');
-    }
-    if (/\b(transaction id|transaction ID|txn id|txn ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('txnid')) {
-      alreadyAsked.push('✗ transaction ID');
-      addedTopics.add('txnid');
-    }
-    if (/\b(merchant|company|vendor|shop)\b/i.test(allHoneypotQuestions) && !addedTopics.has('merchant')) {
-      alreadyAsked.push('✗ merchant');
-      addedTopics.add('merchant');
-    }
-    if (/\b(upi|upi id|upi handle|upi ID)\b/i.test(allHoneypotQuestions) && !addedTopics.has('upi')) {
-      alreadyAsked.push('✗  UPI');
-      addedTopics.add('upi');
-    }
-    if (/\b(amount|how much|transaction amount|prize.*money|refund.*amount)\b/i.test(allHoneypotQuestions) && !addedTopics.has('amount')) {
-      alreadyAsked.push('✗ amount');
-      addedTopics.add('amount');
-    }
-    if (/\b(case id|reference id|reference number|case number|ref id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('caseid')) {
-      alreadyAsked.push('✗ case ID');
-      addedTopics.add('caseid');
-    }
-    if (/\b(department|which department|what department)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('dept')) {
-      alreadyAsked.push('✗ department');
-      addedTopics.add('dept');
-    }
-    if (/\b(name|who are you|what.*name|your name)\b/i.test(allHoneypotQuestions) && totalMessages > 0 && !addedTopics.has('name')) {
-      alreadyAsked.push('✗ name');
-      addedTopics.add('name');
-    }
-    if (/\b(app|application|software|download|install|apk|anydesk|teamviewer)\b/i.test(allHoneypotQuestions) && !addedTopics.has('app')) {
-      alreadyAsked.push('✗ app/software');
-      addedTopics.add('app');
-    }
-    if (/\b(link|website|url|domain)\b/i.test(allHoneypotQuestions) && !addedTopics.has('link')) {
-      alreadyAsked.push('✗ link/website');
-      addedTopics.add('link');
-    }
-    if (/\b(fee|payment|pay|processing fee)\b/i.test(allHoneypotQuestions) && !addedTopics.has('fee')) {
-      alreadyAsked.push('✗ fee/payment');
-      addedTopics.add('fee');
-    }
-    if (/\b(tracking id|consignment number|package id)\b/i.test(allHoneypotQuestions) && !addedTopics.has('tracking')) {
-      alreadyAsked.push('✗ tracking ID');
-      addedTopics.add('tracking');
-    }
-    if (/\b(challan|violation number|vehicle number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('challan')) {
-      alreadyAsked.push('✗ challan/vehicle details');
-      addedTopics.add('challan');
-    }
-    if (/\b(consumer number|electricity id|ca number)\b/i.test(allHoneypotQuestions) && !addedTopics.has('consumer')) {
-      alreadyAsked.push('✗ consumer/electricity number');
-      addedTopics.add('consumer');
+    for (const [key, label] of topicLabels) {
+      if ((key === 'dept' || key === 'name') && totalMessages === 0) continue;
+      if (addedTopics.has(key)) alreadyAsked.push(label);
     }
 
     // OTP tracking
-    const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotQuestions);
-    const otpMentionCount = (allHoneypotQuestions.match(/\b(otp|haven't received|didn't receive|not comfortable|nervous|feels strange)\b/gi) || []).length;
+    const mentionedOTP = /\b(otp|haven't received|didn't receive|not comfortable|don't want)\b/i.test(allHoneypotText);
+    const otpMentionCount = (allHoneypotText.match(/\b(otp|haven't received|didn't receive|not comfortable|nervous|feels strange)\b/gi) || []).length;
 
     // Scammer asking for OTP?
     // STRICTER: Must match "OTP", "PIN", "Password", "CVV" directly OR "share code".
@@ -1553,7 +1582,10 @@ Generate JSON:`;
       const rawResponse = completion.choices[0].message.content;
       console.log('🤖 LLM Raw Response:', rawResponse);
 
-      const agentResponse = JSON.parse(rawResponse);
+      const parsed = extractFirstJsonValue(rawResponse);
+      const agentResponse = (parsed && typeof parsed === 'object')
+        ? parsed
+        : { reply: stripCodeFences(rawResponse) };
 
       const finalResponse = {
         reply: agentResponse.reply || "I'm confused about this. Can you provide more details?",
@@ -1589,6 +1621,8 @@ Generate JSON:`;
         conversationHistory
       );
       finalResponse.reply = this.enforceSingleQuestion(finalResponse.reply);
+      finalResponse.reply = this.enforceMaxSentences(finalResponse.reply, 2);
+      finalResponse.reply = this.ensureHasQuestionMark(finalResponse.reply);
 
       const finalizedResponse = this.applyDeterministicTermination(finalResponse, turnNumber);
       finalizedResponse.agentNotes = this.fixupAgentNotes(finalizedResponse.agentNotes, finalizedResponse.intelSignals);
