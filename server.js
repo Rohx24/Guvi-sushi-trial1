@@ -76,6 +76,17 @@ const assertStrictTurnPayload = (payload) => {
     return strict;
 };
 
+// ---------------------------
+// Rubric C: Engagement Metrics (server-side truth)
+// ---------------------------
+const computeEngagementMetrics = (sessionData, sessionEndTs) => {
+    const end = Number.isFinite(Number(sessionEndTs)) ? Number(sessionEndTs) : Date.now();
+    const start = Number.isFinite(Number(sessionData?.sessionStartTs)) ? Number(sessionData.sessionStartTs) : end;
+    const engagementDurationSeconds = Math.max(0, Math.round((end - start) / 1000));
+    const totalMessagesExchanged = Array.isArray(sessionData?.messages) ? sessionData.messages.length : 0;
+    return { engagementDurationSeconds, totalMessagesExchanged };
+};
+
 const normalizeForExtraction = (text) => {
     let t = String(text || '');
     if (!t) return '';
@@ -406,6 +417,40 @@ if (String(process.env.DETERMINISTIC_INTEL_SELFTEST || '').toLowerCase() === 'tr
     process.exit(0);
 }
 
+// Engagement metrics self-test (no OpenAI key required)
+// Usage: ENGAGEMENT_METRICS_SELFTEST=true node server.js
+if (String(process.env.ENGAGEMENT_METRICS_SELFTEST || '').toLowerCase() === 'true') {
+    // Use synchronous sleep so we can exit before OpenAI client instantiation.
+    const sleepSync = (ms) => {
+        const sab = new SharedArrayBuffer(4);
+        const ia = new Int32Array(sab);
+        Atomics.wait(ia, 0, 0, ms);
+    };
+
+    try {
+        const sessionData = { sessionStartTs: Date.now(), messages: [] };
+        sessionData.messages.push({ scammer: '1', agent: 'a' });
+        sleepSync(1200);
+        sessionData.messages.push({ scammer: '2', agent: 'b' });
+        sessionData.messages.push({ scammer: '3', agent: 'c' });
+
+        const metrics = computeEngagementMetrics(sessionData, Date.now());
+        console.log('Engagement metrics self-test:', metrics);
+
+        if (metrics.engagementDurationSeconds !== 1) {
+            throw new Error(`Expected engagementDurationSeconds=1, got ${metrics.engagementDurationSeconds}`);
+        }
+        if (metrics.totalMessagesExchanged !== 3) {
+            throw new Error(`Expected totalMessagesExchanged=3, got ${metrics.totalMessagesExchanged}`);
+        }
+
+        process.exit(0);
+    } catch (err) {
+        console.error('Engagement metrics self-test failed:', err.message);
+        process.exit(1);
+    }
+}
+
 // Initialize agent
 const agent = new HoneypotAgent();
 
@@ -599,6 +644,9 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
 
             // Send final result to GUVI callback
             try {
+                const sessionEndTs = Date.now();
+                const engagementMetrics = computeEngagementMetrics(sessionData, sessionEndTs);
+
                 const finalOutput = agent.mapFinalOutput(
                     {
                         ...response,
@@ -607,12 +655,16 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
                     },
                     conversationHistory,
                     sessionData.sessionStartTs,
-                    Date.now()
+                    sessionEndTs
                 );
+
+                // Rubric C: enforce server-side engagement metrics (do not use request conversationHistory length).
+                finalOutput.engagementMetrics = engagementMetrics;
 
                 sessionData.finalOutput = finalOutput;
                 sessions.set(sessionId, sessionData);
 
+                console.log('📊 Final engagementMetrics:', finalOutput.engagementMetrics);
                 console.log('📤 Sending to GUVI:', JSON.stringify(finalOutput, null, 2));
 
                 await sendFinalResultToGuvi(finalOutput);
