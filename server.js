@@ -300,8 +300,8 @@ app.post('/api/conversation', authenticateApiKey, async (req, res) => {
                 // Don't fail the main response if callback fails
             }
 
-            // Clean up session after sending
-            setTimeout(() => sessions.delete(sessionId), 60000);
+            // Clean up session after sending (keep finalOutput available briefly for /api/final/:sessionId).
+            setTimeout(() => sessions.delete(sessionId), 10 * 60 * 1000);
         }
 
         // Return strict per-turn output contract
